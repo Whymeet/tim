@@ -30,12 +30,14 @@ def screenshot_group_stats(group_name, output_file, ads_url):
 
         # --- После капчи (или если её не было) продолжаем как обычно:
         try:
-            group_row = page.locator(f'text="{group_name}"').first
+            # Используем неполное совпадение текста, чтобы учесть различия в названии
+            group_row = page.locator(f"text={group_name}").first
             if group_row.count() > 0:
                 stat_btn = group_row.locator('xpath=..').locator('svg[aria-hidden="true"]')
                 if stat_btn.count() > 0:
                     stat_btn.click()
                     page.wait_for_timeout(2000)
+                    os.makedirs(os.path.dirname(output_file), exist_ok=True)
                     page.screenshot(path=output_file, full_page=True)
                 else:
                     print(f"Не найден значок статистики у группы {group_name}")
