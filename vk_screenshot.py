@@ -1,11 +1,22 @@
 import os
+import json
 from playwright.sync_api import sync_playwright
 from screenshot_utils import draw_browser_bar  # ← не забудь импортировать!
+
+def load_vk_cookies():
+    with open('vk_storage.json', 'r', encoding='utf-8') as f:
+        storage_data = json.load(f)
+        return storage_data.get('cookies', [])
 
 def take_screenshot_with_views(url, output_file):
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(viewport={"width": 1280, "height": 1000})
+        
+        # Добавляем куки для авторизации
+        cookies = load_vk_cookies()
+        context.add_cookies(cookies)
+        
         page = context.new_page()
         page.goto(url, timeout=60000)
         page.wait_for_timeout(4000)

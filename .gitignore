@@ -41,3 +41,4 @@ assets/
 # OS specific
 .DS_Store
 Thumbs.db
+vk_storage.json
