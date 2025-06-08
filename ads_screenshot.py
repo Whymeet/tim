@@ -37,7 +37,9 @@ def screenshot_group_stats(group_name, output_file, ads_url):
         # --- После капчи (или если её не было) продолжаем как обычно:
         try:
             # Используем неполное совпадение текста, чтобы учесть различия в названии
-            group_row = page.locator(f"text={group_name}").first
+            # Use exact text matching with quoting to correctly handle
+            # group names that contain spaces or special characters
+            group_row = page.locator(f'text="{group_name}"').first
             if group_row.count() > 0:
                 stat_btn = (
                     group_row
