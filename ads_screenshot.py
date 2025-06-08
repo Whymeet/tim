@@ -6,6 +6,12 @@ def is_captcha(page):
     return page.locator('input[name="captcha_key"], .page_block_captcha, [id*="captcha"], text="Я не робот"').count() > 0
 
 def screenshot_group_stats(group_name, output_file, ads_url):
+    """Open the VK Ads dashboard, find a group and capture its stats.
+
+    The function loads the dashboard at ``ads_url``, searches the table for
+    ``group_name`` and clicks the icon with ``poll_outline_20`` class to open
+    the statistics view. The resulting page is saved as ``output_file``.
+    """
     with sync_playwright() as p:
         # 1. Сначала headless режим
         browser = p.chromium.launch(headless=True)
@@ -33,10 +39,15 @@ def screenshot_group_stats(group_name, output_file, ads_url):
             # Используем неполное совпадение текста, чтобы учесть различия в названии
             group_row = page.locator(f"text={group_name}").first
             if group_row.count() > 0:
-                stat_btn = group_row.locator('xpath=..').locator('svg[aria-hidden="true"]')
+                stat_btn = (
+                    group_row
+                    .locator('xpath=ancestor::tr')
+                    .locator('svg[class*="poll_outline_20"]')
+                    .first
+                )
                 if stat_btn.count() > 0:
                     stat_btn.click()
-                    page.wait_for_timeout(2000)
+                    page.wait_for_load_state("networkidle")
                     os.makedirs(os.path.dirname(output_file), exist_ok=True)
                     page.screenshot(path=output_file, full_page=True)
                 else:
