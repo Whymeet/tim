@@ -6,7 +6,11 @@ def main():
     file_path = "posts.xlsx"
     output_dir = "assets"
     output_report = "Отчет.docx"
-    ads_url = "https://ads.vk.com/hq/dashboard/ad_groups?sudo=vkads_3012708486%40mailru&mode=ads&attribution=conversion&date_from=01.04.2025&date_to=04.05.2025&sort=-created"
+    ads_url = (
+        "https://ads.vk.com/hq/dashboard/ad_plans?"
+        "sudo=vkads_3012708486%40mailru&mode=ads&attribution=conversion&"
+        "date_from=01.04.2025&date_to=04.05.2025&sort=-created"
+    )
 
     print("Загрузка постов из файла...")
     posts = load_posts(file_path)
