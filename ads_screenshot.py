@@ -2,8 +2,8 @@ from playwright.sync_api import sync_playwright
 import os
 
 def is_captcha(page):
-    # Примерно! Исправь селектор под vk ads (обычно input[name="captcha_key"] или текст "капча")
-    return page.locator('input[name="captcha_key"], .page_block_captcha, [id*="captcha"], text="Я не робот"').count() > 0
+    # Проверяем наличие капчи по разным селекторам
+    return page.locator('input[name="captcha_key"], .page_block_captcha, [id*="captcha"], :text("Я не робот")').count() > 0
 
 def screenshot_group_stats(group_name, output_file, ads_url):
     with sync_playwright() as p:
