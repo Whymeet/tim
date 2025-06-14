@@ -10,7 +10,7 @@ def main():
     output_report = "Отчет.docx"
     
     # URL для статистики VK Ads
-    ads_url = "https://ads.vk.com/hq/dashboard/ad_groups?sudo=vkads_3012708486%40mailru&mode=ads&attribution=conversion&date_from=01.04.2025&date_to=04.05.2025&sort=-created"
+    ads_url = "https://ads.vk.com/hq/dashboard/ad_plans?sudo=vkads_3012708486%40mailru&mode=ads&attribution=conversion&date_from=01.04.2025&date_to=04.05.2025&sort=-created"
     ads_screenshot_path = os.path.join(output_dir, "vk_ads_stats.png")
 
     print("Загрузка постов из файла...")
