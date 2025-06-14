@@ -8,9 +8,9 @@ def is_captcha(page):
 def screenshot_group_stats(group_name, output_file, ads_url):
     """Take a screenshot of the VK Ads dashboard page."""
     with sync_playwright() as p:
-        # Открываем браузер БЕЗ headless (точно как в vk_screenshot.py)
+        # Используем отдельный файл сессии для VK Ads
         browser = p.chromium.launch(headless=False)
-        context = browser.new_context(storage_state="vk_storage.json", viewport={"width": 1400, "height": 900})
+        context = browser.new_context(storage_state="vk_ads_storage.json", viewport={"width": 1400, "height": 900})
         page = context.new_page()
         
         print(f"Открываю VK Ads: {ads_url}")
@@ -29,6 +29,9 @@ def screenshot_group_stats(group_name, output_file, ads_url):
         input("Когда страница VK Ads полностью загрузилась, нажми Enter для создания скриншота...")
 
         try:
+            # Обновляем сессию после возможных действий
+            context.storage_state(path="vk_ads_storage.json")
+            
             # Создаем директорию если нужно
             os.makedirs(os.path.dirname(output_file), exist_ok=True)
             # Делаем скриншот всей страницы
