@@ -23,9 +23,6 @@ def screenshot_group_stats(group_name, output_file, ads_url):
 
         page.wait_for_timeout(4000)
 
-        print("Если есть капча или нужно авторизоваться - сделай это сейчас")
-        input("Когда страница VK Ads полностью загрузилась, нажми Enter...")
-
         try:
             context.storage_state(path="vk_storage.json")
 
@@ -49,11 +46,9 @@ def screenshot_group_stats(group_name, output_file, ads_url):
             if stats_icon.count() > 0:
                 stats_icon.first.click()
                 print("✅ Клик по иконке статистики выполнен")
-                page.wait_for_timeout(3000)
-                input("Проверь, что окно статистики открылось правильно, нажми Enter для скриншота...")
+                page.wait_for_timeout(4000)
             else:
-                print("❌ Не найден svg с классом vkuiIcon--poll_outline_20, найди и нажми вручную")
-                input("Когда статистика откроется, нажми Enter...")
+                print("❌ Не найден svg с классом vkuiIcon--poll_outline_20, пропускаем скрин")
 
             os.makedirs(os.path.dirname(output_file), exist_ok=True)
             page.screenshot(path=output_file, full_page=True)
