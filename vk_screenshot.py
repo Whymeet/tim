@@ -1,22 +1,39 @@
 import os
+import json
 from playwright.sync_api import sync_playwright
 from screenshot_utils import draw_browser_bar
+
+def load_vk_cookies():
+    with open('vk_storage.json', 'r', encoding='utf-8') as f:
+        storage_data = json.load(f)
+        return storage_data.get('cookies', [])
 
 def take_screenshot_with_views(url, output_file):
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
-        context = browser.new_context(storage_state="vk_storage.json", viewport={"width": 1280, "height": 1000})
+        context = browser.new_context(viewport={"width": 1280, "height": 1000})
+
+        cookies = load_vk_cookies()
+        context.add_cookies(cookies)
+
         page = context.new_page()
-
         print(f"Открываю пост: {url}")
-        page.goto(url, timeout=60000)
-
         try:
-            page.wait_for_load_state("networkidle", timeout=1500)
-        except:
-            print("Предупреждение: networkidle не наступил, продолжаем...")
+            page.goto(url, timeout=60000, wait_until="domcontentloaded")
+        except Exception as e:
+            print(f"Ошибка загрузки страницы: {e}")
+            browser.close()
+            return
 
         page.wait_for_timeout(4000)
+
+        try:
+            date_elem = page.locator('[data-testid="post_date_block_preview"]')
+            if date_elem.count() > 0:
+                date_elem.hover()
+                page.wait_for_timeout(1500)
+        except Exception as e:
+            print(f"Ошибка при наведении на дату: {e}")
 
         try:
             post = page.locator('.Post, .wall_post_text, .post')
@@ -30,7 +47,6 @@ def take_screenshot_with_views(url, output_file):
             browser.close()
 
     draw_browser_bar(output_file, url)
-
 
 def batch_screenshots(posts, output_dir):
     os.makedirs(output_dir, exist_ok=True)

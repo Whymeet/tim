@@ -22,7 +22,7 @@ def main():
     print("Создание скриншота статистики VK Ads...")
     ads_screenshot_success = False
     try:
-        screenshot_group_stats("VK Ads Dashboard", ads_screenshot_path, ads_url)
+        screenshot_group_stats("Про_Роговское", ads_screenshot_path, ads_url)
         # Проверяем, что файл действительно создался
         if os.path.exists(ads_screenshot_path):
             file_size = os.path.getsize(ads_screenshot_path)
