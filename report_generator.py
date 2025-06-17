@@ -4,21 +4,26 @@ import os
 from datetime import datetime
 
 
-def generate_report(posts, output_file: str = "Отчет.docx", assets_dir: str = "assets") -> None:
-    """Собирает DOCX‑отчёт.
+def generate_report(
+    posts,
+    output_file: str = "Отчет.docx",
+    assets_dir: str = "assets",
+) -> None:
+    """Формирует итоговый DOCX‑отчёт.
 
-    1. *posts* — таблица из `post_loader`, как раньше (скрин поста + ссылка).
-    2. Все PNG‑файлы в *assets_dir* **кроме** `post_*.png` и `vk_ads_stats.png`
-       добавляются в конце отчёта. Таким образом, в документ попадут:
-           ▸ `*_overview.png`, `*_overview_graph.png`, `*_overview_funnel.png`,
-             `*_demography.png`, `*_geo.png`, `*_phrases.png`, …
+    ▸ *posts* — список словарей после `post_loader` / `batch_screenshots`.
+    ▸ *assets_dir* — папка, где лежат PNG‑файлы из VK Ads.
+      В документ попадают **все** картинки кроме `post_*.png` и
+      `vk_ads_stats.png` — таким образом, подключаются файлы вида
+      `*_overview.png`, `*_overview_graph.png`, `*_overview_funnel.png`,
+      `*_demography.png`, `*_geo.png`, `*_phrases.png`, …
     """
 
     doc = Document()
     doc.add_heading("Отчет по рекламным постам", level=0)
 
     # ──────────────────────────────────────────────────────────────────
-    # 1. Блок с опубликованными постами                                
+    # 1. Блок с опубликованными постами                                ──
     # ──────────────────────────────────────────────────────────────────
     for i, post in enumerate(posts, 1):
         title = post.get("Название поста") or f"Пост {i}"
@@ -40,38 +45,38 @@ def generate_report(posts, output_file: str = "Отчет.docx", assets_dir: str
         doc.add_paragraph("-" * 40)
 
     # ──────────────────────────────────────────────────────────────────
-    # 2. Блок статистики VK Ads (все PNG‑файлы, кроме постов)         
+    # 2. Блок статистики VK Ads                                         ──
     # ──────────────────────────────────────────────────────────────────
-    pngs = [
-        f for f in os.listdir(assets_dir)
-        if f.lower().endswith(".png")
-        and not f.startswith("post_")
-        and f != "vk_ads_stats.png"
-    ]
+    if os.path.isdir(assets_dir):
+        pngs = sorted(
+            f for f in os.listdir(assets_dir)
+            if f.lower().endswith(".png")
+            and not f.startswith("post_")
+            and f != "vk_ads_stats.png"
+        )
 
-    if pngs:
-        doc.add_page_break()
-        doc.add_heading("Статистика VK Ads", level=1)
+        if pngs:
+            doc.add_page_break()
+            doc.add_heading("Статистика VK Ads", level=1)
 
-        for fname in sorted(pngs):
-            fpath = os.path.join(assets_dir, fname)
-            if not os.path.exists(fpath):
-                continue
+            for fname in pngs:
+                fpath = os.path.join(assets_dir, fname)
+                if not os.path.exists(fpath):
+                    continue
 
-            # Красивый подписи — убираем расширение и подчёркивания
-            caption = os.path.splitext(fname)[0].replace("_", " ")
-            # Для капшена используем простой параграф, а не heading
-            doc.add_paragraph(caption, style="Intense Quote")
-            doc.add_picture(fpath, width=Inches(6))
-            doc.add_paragraph("")  # небольшой отступ
+                caption = os.path.splitext(fname)[0].replace("_", " ")
+                doc.add_paragraph(caption, style="Intense Quote")
+                doc.add_picture(fpath, width=Inches(6))
+                doc.add_paragraph("")
+    else:
+        print(f"⚠️  '{assets_dir}' — это не каталог (возможно, файл). Блок статистики VK Ads пропущен.")
 
     # ──────────────────────────────────────────────────────────────────
-    # 3. Дата формирования отчёта                                      
+    # 3. Дата формирования отчёта                                       ──
     # ──────────────────────────────────────────────────────────────────
     doc.add_paragraph(
         f"Дата создания отчёта: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
     )
 
-    # ──────────────────────────────────────────────────────────────────
     doc.save(output_file)
-    print(f"Отчёт сохранён как {output_file}")
+    print(f"✅ Отчёт сохранён как {output_file}")
