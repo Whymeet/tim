@@ -12,13 +12,13 @@ def main() -> None:
     output_dir   = "assets"                # куда кладём PNG‑и
     output_doc   = "Отчет.docx"            # итоговый DOCX
     ads_url      = (
-        "https://ads.vk.com/hq/dashboard/ad_plans"
+        "https://ads.vk.com/hq/dashboard/ad_groups"
         "?sudo=vkads_3012708486%40mailru"
         "&mode=ads&attribution=conversion"
         "&date_from=01.04.2025&date_to=04.05.2025"
         "&sort=-created"
     )
-    ad_plan_name = "Про_Роговское"         # точное имя рекламного плана
+    ad_plan_name = "ЦР25_ИЗМАЙЛОВО_ПРЕФЕКТ"         # точное имя рекламного плана
 
     # ensure workspace exists -------------------------------------------------
     os.makedirs(output_dir, exist_ok=True)
@@ -30,7 +30,7 @@ def main() -> None:
         print(f"✅ Загружено постов: {len(posts)}")
 
         print("📸 Создание скриншотов постов…")
-        batch_screenshots(posts, output_dir)
+       # batch_screenshots(posts, output_dir)
         print("✅ Скриншоты постов созданы")
 
         # Проверяем, что папка всё ещё существует
