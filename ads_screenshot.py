@@ -283,15 +283,6 @@ def screenshot_group_stats(
                 continue
 
             if tab == "overview":
-                # График трафика
-                graph = page.locator("canvas[role='img']").first
-                if graph.count():
-                    graph_path = os.path.join(
-                        output_dir, f"{group_name}_overview_graph.png"
-                    )
-                    _shot_with_topline(page, graph, graph_path)
-                    print(f"✅ График сохранён: {graph_path}")
-
                 # Воронка конверсий
                 caption = page.locator("text=Воронка конверсий").first
                 funnel = page.locator("div[class^='ConversionsChart_wrap']").first
@@ -301,13 +292,13 @@ def screenshot_group_stats(
                     )
                     _shot_with_caption(page, caption, funnel, funnel_path)
                     print(f"✅ Воронка сохранена: {funnel_path}")
-
-            # Полный скриншот вкладки
-            _scroll_to_bottom(page)
-            tab_path = os.path.join(output_dir, f"{group_name}_{tab}.png")
-            _safe_mkdir(output_dir)
-            page.screenshot(path=tab_path, full_page=True)
-            print(f"✅ Скриншот вкладки сохранён: {tab_path}")
+            elif tab != "overview":
+                # Полный скриншот вкладки (только для не-overview вкладок)
+                _scroll_to_bottom(page)
+                tab_path = os.path.join(output_dir, f"{group_name}_{tab}.png")
+                _safe_mkdir(output_dir)
+                page.screenshot(path=tab_path, full_page=True)
+                print(f"✅ Скриншот вкладки сохранён: {tab_path}")
 
         print("✅ Все скриншоты VK Ads созданы успешно")
         browser.close()
