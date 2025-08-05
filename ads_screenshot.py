@@ -98,10 +98,6 @@ def _shot_with_caption(page, caption, target, path):
 def _shot_demography_section(page, path):
     """Специальный скриншот для демографии: от названия компании до нижней статистики"""
     try:
-        # Устанавливаем масштаб 60% для еще лучшего обзора
-        page.evaluate("document.body.style.zoom = '0.6'")
-        page.wait_for_timeout(500)
-        
         # Прокручиваем в самый верх страницы
         page.evaluate("window.scrollTo(0, 0)")
         page.wait_for_timeout(300)
@@ -154,24 +150,42 @@ def _shot_demography_section(page, path):
                 bottom_box = bottom_element.bounding_box()
                 
                 if title_box and bottom_box:
-                    # Находим всю ширину страницы для полного захвата контента
+                    # Получаем размеры страницы для корректных границ
                     page_width = page.evaluate("document.documentElement.scrollWidth")
+                    page_height = page.evaluate("document.documentElement.scrollHeight")
                     viewport_width = page.evaluate("window.innerWidth")
-                    full_width = max(page_width, viewport_width, 1400)  # Минимум 1400px
                     
-                    # Расширяем область захвата во все стороны
-                    expanded_area = {
-                        "x": 0,  # Начинаем с левого края
-                        "y": max(0, title_box["y"] - 100),  # Добавляем больше отступа сверху
-                        "width": full_width,  # Полная ширина страницы
-                        "height": (bottom_box["y"] + bottom_box["height"] + 50) - max(0, title_box["y"] - 100)
+                    # Находим оптимальную ширину для контента демографии
+                    demo_container = page.locator("div[class^='Demography_wrap'], div[class^='ViewPoints_panel']").first
+                    container_box = demo_container.bounding_box() if demo_container.count() else None
+                    
+                    # Определяем область более аккуратно
+                    if container_box:
+                        # Используем границы контейнера с небольшими отступами
+                        start_x = max(0, container_box["x"] - 20)
+                        content_width = min(container_box["width"] + 40, page_width - start_x)
+                    else:
+                        # Fallback: центрируем относительно заголовка
+                        start_x = max(0, title_box["x"] - 100)
+                        content_width = min(800, page_width - start_x)
+                    
+                    # Определяем высоту строго по контенту
+                    start_y = max(0, title_box["y"] - 50)
+                    end_y = min(bottom_box["y"] + bottom_box["height"] + 30, page_height)
+                    content_height = end_y - start_y
+                    
+                    # Создаем область только с реальным контентом
+                    content_area = {
+                        "x": int(start_x),
+                        "y": int(start_y),
+                        "width": int(content_width),
+                        "height": int(content_height)
                     }
                     
-                    page.screenshot(path=path, clip=expanded_area)
-                    print(f"✅ Скриншот демографии (полная ширина): {path}")
+                    print(f"📐 Область скриншота: x={content_area['x']}, y={content_area['y']}, w={content_area['width']}, h={content_area['height']}")
                     
-                    # Возвращаем нормальный масштаб
-                    page.evaluate("document.body.style.zoom = '1.0'")
+                    page.screenshot(path=path, clip=content_area)
+                    print(f"✅ Скриншот демографии (без масштабирования): {path}")
                     return
         
         # Если не получилось найти элементы, делаем скриншот всего контейнера
@@ -184,16 +198,8 @@ def _shot_demography_section(page, path):
         else:
             page.screenshot(path=path, full_page=True)
         
-        # Возвращаем нормальный масштаб
-        page.evaluate("document.body.style.zoom = '1.0'")
-        
     except Exception as e:
         print(f"⚠️  Ошибка при создании скриншота демографии: {e}")
-        # Возвращаем нормальный масштаб даже при ошибке
-        try:
-            page.evaluate("document.body.style.zoom = '1.0'")
-        except:
-            pass
         page.screenshot(path=path, full_page=True)
 
 
