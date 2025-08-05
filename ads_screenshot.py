@@ -95,9 +95,21 @@ def _shot_with_caption(page, caption, target, path):
         target.screenshot(path=path)
 
 
-def _shot_demography_section(page, path):
-    """Специальный скриншот для демографии: от названия компании до нижней статистики"""
+def _shot_demography_section(page, path, demography_zoom=0.6):
+    """Специальный скриншот для демографии: от названия компании до нижней статистики
+    
+    Args:
+        page: Playwright page объект
+        path: Путь для сохранения скриншота
+        demography_zoom: Масштаб для демографии (по умолчанию 0.6)
+    """
     try:
+        # Сохраняем текущий масштаб
+        original_zoom = page.evaluate("document.body.style.zoom")
+        
+        # Устанавливаем масштаб для демографии
+        page.evaluate(f"document.body.style.zoom = '{demography_zoom}'")
+        page.wait_for_timeout(1000)  # Ждем применения масштаба
         # Прокручиваем в самый верх страницы
         page.evaluate("window.scrollTo(0, 0)")
         page.wait_for_timeout(300)
@@ -201,6 +213,46 @@ def _shot_demography_section(page, path):
     except Exception as e:
         print(f"⚠️  Ошибка при создании скриншота демографии: {e}")
         page.screenshot(path=path, full_page=True)
+    finally:
+        # Восстанавливаем оригинальный масштаб
+        try:
+            page.evaluate(f"document.body.style.zoom = '{original_zoom if original_zoom else 'initial'}'")
+        except:
+            pass
+
+
+def _shot_geo_section(page, path, geo_zoom=0.8):
+    """Специальный скриншот для географии с настраиваемым масштабом
+    
+    Args:
+        page: Playwright page объект
+        path: Путь для сохранения скриншота
+        geo_zoom: Масштаб для географии (по умолчанию 0.8)
+    """
+    try:
+        # Сохраняем текущий масштаб
+        original_zoom = page.evaluate("document.body.style.zoom")
+        
+        # Устанавливаем масштаб для географии
+        page.evaluate(f"document.body.style.zoom = '{geo_zoom}'")
+        page.wait_for_timeout(1000)  # Ждем применения масштаба
+        
+        # Прокручиваем вниз для загрузки всего контента
+        _scroll_to_bottom(page)
+        
+        # Делаем полный скриншот страницы
+        page.screenshot(path=path, full_page=True)
+        print(f"✅ Скриншот географии с масштабом {geo_zoom}: {path}")
+        
+    except Exception as e:
+        print(f"⚠️  Ошибка при создании скриншота географии: {e}")
+        page.screenshot(path=path, full_page=True)
+    finally:
+        # Восстанавливаем оригинальный масштаб
+        try:
+            page.evaluate(f"document.body.style.zoom = '{original_zoom if original_zoom else 'initial'}'")
+        except:
+            pass
 
 
 # ────────────────────────────── main routine ────────────────────────────────
@@ -211,8 +263,25 @@ def screenshot_group_stats(
     output_dir: str,
     ads_url: str,
     tabs: tuple[str, ...] | None = ("overview", "demography", "geo"),
+    viewport_width: int = 1920,
+    viewport_height: int = 1080,
+    zoom_level: float = 0.8,
+    demography_zoom: float = 0.6,
+    geo_zoom: float = 0.8,
 ):
-    """Save screenshots of *group_name* stats into *output_dir*."""
+    """Save screenshots of *group_name* stats into *output_dir*.
+    
+    Args:
+        group_name: Название группы для поиска
+        output_dir: Папка для сохранения скриншотов
+        ads_url: URL страницы VK Ads
+        tabs: Список вкладок для скриншотов
+        viewport_width: Ширина окна браузера (по умолчанию 1920)
+        viewport_height: Высота окна браузера (по умолчанию 1080)
+        zoom_level: Уровень масштабирования страницы (по умолчанию 0.8)
+        demography_zoom: Масштаб для демографии (по умолчанию 0.6)
+        geo_zoom: Масштаб для географии (по умолчанию 0.8)
+    """
 
     # Убеждаемся, что папка существует
     _safe_mkdir(output_dir)
@@ -221,7 +290,7 @@ def screenshot_group_stats(
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
         ctx = browser.new_context(
-            storage_state="vk_storage.json", viewport={"width": 1400, "height": 900}
+            storage_state="vk_storage.json", viewport={"width": viewport_width, "height": viewport_height}
         )
         page = ctx.new_page()
 
@@ -231,6 +300,9 @@ def screenshot_group_stats(
             page.wait_for_load_state("networkidle", timeout=10_000)
         except Exception:
             print("⚠️  networkidle wasn't reached – continuing …")
+        
+        # Устанавливаем масштаб страницы для лучшего отображения графиков
+        page.evaluate(f"document.body.style.zoom = '{zoom_level}'")
         page.wait_for_timeout(3_000)
 
         # Captcha -----------------------------------------------------------
@@ -404,7 +476,12 @@ def screenshot_group_stats(
                 # Специальный скриншот для демографии: от названия компании до статистики
                 tab_path = os.path.join(output_dir, f"{group_name}_{tab}.png")
                 _safe_mkdir(output_dir)
-                _shot_demography_section(page, tab_path)
+                _shot_demography_section(page, tab_path, demography_zoom)
+            elif tab == "geo":
+                # Специальный скриншот для географии с настраиваемым масштабом
+                tab_path = os.path.join(output_dir, f"{group_name}_{tab}.png")
+                _safe_mkdir(output_dir)
+                _shot_geo_section(page, tab_path, geo_zoom)
             elif tab != "overview":
                 # Полный скриншот вкладки (только для остальных вкладок)
                 _scroll_to_bottom(page)
