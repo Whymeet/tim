@@ -38,7 +38,27 @@ def take_screenshot_with_views(url, output_file):
         try:
             post = page.locator('.Post, .wall_post_text, .post')
             if post.count() > 0:
-                post.first.screenshot(path=output_file)
+                # Получаем координаты поста
+                post_box = post.first.bounding_box()
+                if post_box:
+                    # Расширяем область захвата для более широкого скриншота
+                    page_width = page.evaluate("document.documentElement.scrollWidth")
+                    viewport_width = page.evaluate("window.innerWidth")
+                    full_width = max(page_width, viewport_width, 1200)  # Минимум 1200px
+                    
+                    # Создаем расширенную область
+                    expanded_area = {
+                        "x": 0,  # Начинаем с левого края
+                        "y": max(0, post_box["y"] - 50),  # Отступ сверху
+                        "width": full_width,  # Полная ширина
+                        "height": post_box["height"] + 100  # Отступ снизу
+                    }
+                    
+                    page.screenshot(path=output_file, clip=expanded_area)
+                    print(f"📸 Расширенный скриншот поста: {output_file}")
+                else:
+                    # Fallback: скриншот элемента поста
+                    post.first.screenshot(path=output_file)
             else:
                 page.screenshot(path=output_file, full_page=True)
         except Exception as e:

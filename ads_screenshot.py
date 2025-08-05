@@ -95,6 +95,108 @@ def _shot_with_caption(page, caption, target, path):
         target.screenshot(path=path)
 
 
+def _shot_demography_section(page, path):
+    """Специальный скриншот для демографии: от названия компании до нижней статистики"""
+    try:
+        # Устанавливаем масштаб 60% для еще лучшего обзора
+        page.evaluate("document.body.style.zoom = '0.6'")
+        page.wait_for_timeout(500)
+        
+        # Прокручиваем в самый верх страницы
+        page.evaluate("window.scrollTo(0, 0)")
+        page.wait_for_timeout(300)
+        
+        # Ищем весь контейнер со статистикой
+        main_container = page.locator("div[class^='ViewPoints_layout']").first
+        
+        if main_container.count():
+            # Прокручиваем к контейнеру
+            main_container.scroll_into_view_if_needed()
+            page.wait_for_timeout(500)
+            
+            # Ищем заголовок с названием компании более широко
+            title_selectors = [
+                "span[class^='TopLine_title']:has-text('ЦР25')",
+                "span.vkuiTitle:has-text('ЦР25')",
+                "[class*='title']:has-text('ЦР25')",
+                "span:has-text('ЦР25_')"
+            ]
+            
+            title_element = None
+            for selector in title_selectors:
+                title_element = page.locator(selector).first
+                if title_element.count():
+                    print(f"✅ Найден заголовок: {selector}")
+                    break
+            
+            # Ищем нижний блок статистики
+            bottom_selectors = [
+                "div[class^='Compare_layout']",
+                "div[class^='Demography_wrap']",
+                "div[class*='demography']"
+            ]
+            
+            bottom_element = None
+            for selector in bottom_selectors:
+                elements = page.locator(selector).all()
+                if elements:
+                    bottom_element = elements[-1]  # Берем последний элемент
+                    print(f"✅ Найден нижний блок: {selector}")
+                    break
+            
+            if title_element and title_element.count() and bottom_element:
+                # Прокручиваем к заголовку
+                title_element.scroll_into_view_if_needed()
+                page.wait_for_timeout(300)
+                
+                # Получаем координаты
+                title_box = title_element.bounding_box()
+                bottom_box = bottom_element.bounding_box()
+                
+                if title_box and bottom_box:
+                    # Находим всю ширину страницы для полного захвата контента
+                    page_width = page.evaluate("document.documentElement.scrollWidth")
+                    viewport_width = page.evaluate("window.innerWidth")
+                    full_width = max(page_width, viewport_width, 1400)  # Минимум 1400px
+                    
+                    # Расширяем область захвата во все стороны
+                    expanded_area = {
+                        "x": 0,  # Начинаем с левого края
+                        "y": max(0, title_box["y"] - 100),  # Добавляем больше отступа сверху
+                        "width": full_width,  # Полная ширина страницы
+                        "height": (bottom_box["y"] + bottom_box["height"] + 50) - max(0, title_box["y"] - 100)
+                    }
+                    
+                    page.screenshot(path=path, clip=expanded_area)
+                    print(f"✅ Скриншот демографии (полная ширина): {path}")
+                    
+                    # Возвращаем нормальный масштаб
+                    page.evaluate("document.body.style.zoom = '1.0'")
+                    return
+        
+        # Если не получилось найти элементы, делаем скриншот всего контейнера
+        print("⚠️  Не удалось найти точные элементы, делаем скриншот основного контейнера")
+        container = page.locator("div[class^='ViewPoints_layout'], div[class^='ViewPoints_main']").first
+        if container.count():
+            container.scroll_into_view_if_needed()
+            page.wait_for_timeout(300)
+            container.screenshot(path=path)
+        else:
+            page.screenshot(path=path, full_page=True)
+        
+        # Возвращаем нормальный масштаб
+        page.evaluate("document.body.style.zoom = '1.0'")
+        
+    except Exception as e:
+        print(f"⚠️  Ошибка при создании скриншота демографии: {e}")
+        # Возвращаем нормальный масштаб даже при ошибке
+        try:
+            page.evaluate("document.body.style.zoom = '1.0'")
+        except:
+            pass
+        page.screenshot(path=path, full_page=True)
+
+
 # ────────────────────────────── main routine ────────────────────────────────
 
 
@@ -102,7 +204,7 @@ def screenshot_group_stats(
     group_name: str,
     output_dir: str,
     ads_url: str,
-    tabs: tuple[str, ...] | None = ("overview", "demography", "geo", "phrases"),
+    tabs: tuple[str, ...] | None = ("overview", "demography", "geo"),
 ):
     """Save screenshots of *group_name* stats into *output_dir*."""
 
@@ -292,8 +394,13 @@ def screenshot_group_stats(
                     )
                     _shot_with_caption(page, caption, funnel, funnel_path)
                     print(f"✅ Воронка сохранена: {funnel_path}")
+            elif tab == "demography":
+                # Специальный скриншот для демографии: от названия компании до статистики
+                tab_path = os.path.join(output_dir, f"{group_name}_{tab}.png")
+                _safe_mkdir(output_dir)
+                _shot_demography_section(page, tab_path)
             elif tab != "overview":
-                # Полный скриншот вкладки (только для не-overview вкладок)
+                # Полный скриншот вкладки (только для остальных вкладок)
                 _scroll_to_bottom(page)
                 tab_path = os.path.join(output_dir, f"{group_name}_{tab}.png")
                 _safe_mkdir(output_dir)
