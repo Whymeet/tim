@@ -241,6 +241,14 @@ def _shot_geo_section(page, path, geo_zoom=0.8):
         page.evaluate("window.scrollTo(0, 0)")
         page.wait_for_timeout(300)
         
+        # Ждем завершения сетевых запросов (карты часто загружаются через API)
+        try:
+            print("⏳ Ожидание сетевых запросов...")
+            page.wait_for_load_state("networkidle", timeout=5000)
+            print("✅ Сетевые запросы завершены")
+        except Exception:
+            print("⚠️  Timeout сетевых запросов, продолжаем...")
+        
         # Ищем основной контейнер географии
         geo_selectors = [
             "div[class^='ViewPoints_layout']",
@@ -262,6 +270,56 @@ def _shot_geo_section(page, path, geo_zoom=0.8):
             # Прокручиваем к контейнеру
             main_container.scroll_into_view_if_needed()
             page.wait_for_timeout(500)
+            
+            # Ждем загрузки карты - ищем элементы карты
+            print("⏳ Ожидание загрузки карты...")
+            map_selectors = [
+                "canvas",  # Карты часто рендерятся в canvas
+                "img[src*='map']",  # Изображения карт
+                "div[class*='map']",  # Контейнеры карт
+                "div[class*='Map']",
+                "[class*='leaflet']",  # Leaflet карты
+                "[class*='mapbox']",   # Mapbox карты
+                "[class*='google-map']" # Google Maps
+            ]
+            
+            # Ждем появления любого элемента карты
+            map_loaded = False
+            for attempt in range(10):  # Максимум 10 попыток (10 секунд)
+                for selector in map_selectors:
+                    map_elements = page.locator(selector)
+                    if map_elements.count() > 0:
+                        print(f"✅ Карта найдена: {selector} ({map_elements.count()} элементов)")
+                        map_loaded = True
+                        break
+                
+                if map_loaded:
+                    break
+                    
+                print(f"⏳ Попытка {attempt + 1}/10 - ждем карту...")
+                page.wait_for_timeout(1000)
+            
+            if not map_loaded:
+                print("⚠️  Карта не найдена, но продолжаем...")
+            
+            # Дополнительное ожидание для полной загрузки карты
+            page.wait_for_timeout(2000)
+            
+            # Попытка принудительно обновить карты через JavaScript
+            try:
+                page.evaluate("""
+                    // Принудительное обновление карт
+                    const mapElements = document.querySelectorAll('canvas, [class*="map"], [class*="Map"]');
+                    mapElements.forEach(el => {
+                        if (el.style) el.style.display = 'none';
+                        setTimeout(() => { if (el.style) el.style.display = ''; }, 100);
+                    });
+                """)
+                page.wait_for_timeout(1000)
+            except Exception:
+                pass
+            
+            print("✅ Ожидание завершено, создаем скриншот")
             
             # Получаем координаты контейнера
             container_box = main_container.bounding_box()
@@ -285,6 +343,10 @@ def _shot_geo_section(page, path, geo_zoom=0.8):
                 }
                 
                 print(f"📐 Область скриншота географии: x={content_area['x']}, y={content_area['y']}, w={content_area['width']}, h={content_area['height']}")
+                
+                # Принудительная перерисовка для обновления карт
+                page.evaluate("window.dispatchEvent(new Event('resize'))")
+                page.wait_for_timeout(500)
                 
                 page.screenshot(path=path, clip=content_area)
                 print(f"✅ Скриншот географии с масштабом {geo_zoom}: {path}")
@@ -512,7 +574,12 @@ def screenshot_group_stats(
             tab_btn = page.locator(f"#tab_{tab}")
             if tab_btn.count():
                 tab_btn.click()
-                page.wait_for_timeout(1_000)
+                if tab == "geo":
+                    # Дополнительное ожидание для географии (карты загружаются дольше)
+                    print("⏳ Дополнительное ожидание для загрузки карт...")
+                    page.wait_for_timeout(3_000)
+                else:
+                    page.wait_for_timeout(1_000)
                 print(f"✅ Вкладка {tab} открыта")
             else:
                 print(f"⚠️  Вкладка '{tab}' не найдена – пропускаем")

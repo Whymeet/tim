@@ -5,7 +5,8 @@ import os
 
 def generate_report(posts: list[dict],
                     output_file: str = "Отчёт.docx",
-                    assets_dir: str = "assets") -> None:
+                    assets_dir: str = "assets",
+                    inner_image: str = "inner.png") -> None:
     doc = Document()
     doc.add_heading("Отчёт по рекламным кампаниям VK", level=0)
 
@@ -26,16 +27,29 @@ def generate_report(posts: list[dict],
             if os.path.exists(post.get("Скриншот", "")):
                 doc.add_picture(post["Скриншот"], width=Inches(5))
 
-            # все скрины статистики, начинающиеся с имени группы
+            # сначала добавляем overview_funnel сразу после поста
             prefix = post["Группа"].lower()
+            funnel_file = f"{post['Группа']}_overview_funnel.png"
+            funnel_path = os.path.join(assets_dir, funnel_file)
+            if os.path.exists(funnel_path):
+                doc.add_picture(funnel_path, width=Inches(5))
+                print(f"✅ Добавлен overview_funnel для группы: {post['Группа']}")
+
+            # затем все остальные скрины статистики (кроме funnel)
             stats = sorted(
                 f for f in os.listdir(assets_dir)
                 if f.lower().startswith(prefix) and f.lower().endswith(".png")
+                and not f.endswith("_overview_funnel.png")  # исключаем funnel
             )
             for fname in stats:
                 doc.add_picture(os.path.join(assets_dir, fname), width=Inches(5))
 
-            doc.add_paragraph("—" * 40)
+            # добавляем inner.png в конце каждой рекламной кампании
+            if os.path.exists(inner_image):
+                doc.add_picture(inner_image, width=Inches(5))
+                print(f"✅ Добавлен {inner_image} для группы: {post['Группа']}")
+            else:
+                print(f"⚠️  Файл {inner_image} не найден")
 
     doc.save(output_file)
     print(f"📄 Отчёт сохранён: {output_file}")
