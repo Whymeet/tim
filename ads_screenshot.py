@@ -237,12 +237,68 @@ def _shot_geo_section(page, path, geo_zoom=0.8):
         page.evaluate(f"document.body.style.zoom = '{geo_zoom}'")
         page.wait_for_timeout(1000)  # Ждем применения масштаба
         
-        # Прокручиваем вниз для загрузки всего контента
-        _scroll_to_bottom(page)
+        # Прокручиваем в самый верх страницы
+        page.evaluate("window.scrollTo(0, 0)")
+        page.wait_for_timeout(300)
         
-        # Делаем полный скриншот страницы
+        # Ищем основной контейнер географии
+        geo_selectors = [
+            "div[class^='ViewPoints_layout']",
+            "div[class^='ViewPoints_main']", 
+            "div[class*='geography']",
+            "div[class*='Geography']",
+            "div[class*='geo']"
+        ]
+        
+        main_container = None
+        for selector in geo_selectors:
+            container = page.locator(selector).first
+            if container.count():
+                main_container = container
+                print(f"✅ Найден контейнер географии: {selector}")
+                break
+        
+        if main_container:
+            # Прокручиваем к контейнеру
+            main_container.scroll_into_view_if_needed()
+            page.wait_for_timeout(500)
+            
+            # Получаем координаты контейнера
+            container_box = main_container.bounding_box()
+            
+            if container_box:
+                # Получаем размеры страницы
+                page_width = page.evaluate("document.documentElement.scrollWidth")
+                page_height = page.evaluate("document.documentElement.scrollHeight")
+                
+                # Создаем расширенную область для географии
+                start_x = max(0, container_box["x"] - 50)
+                start_y = max(0, container_box["y"] - 50)
+                content_width = min(container_box["width"] + 100, page_width - start_x)
+                content_height = min(container_box["height"] + 100, page_height - start_y)
+                
+                content_area = {
+                    "x": int(start_x),
+                    "y": int(start_y), 
+                    "width": int(content_width),
+                    "height": int(content_height)
+                }
+                
+                print(f"📐 Область скриншота географии: x={content_area['x']}, y={content_area['y']}, w={content_area['width']}, h={content_area['height']}")
+                
+                page.screenshot(path=path, clip=content_area)
+                print(f"✅ Скриншот географии с масштабом {geo_zoom}: {path}")
+                return
+            else:
+                # Fallback: скриншот контейнера
+                main_container.screenshot(path=path)
+                print(f"✅ Скриншот контейнера географии с масштабом {geo_zoom}: {path}")
+                return
+        
+        # Если контейнер не найден, делаем полный скриншот
+        print("⚠️  Контейнер географии не найден, делаем полный скриншот")
         page.screenshot(path=path, full_page=True)
-        print(f"✅ Скриншот географии с масштабом {geo_zoom}: {path}")
+        print(f"✅ Полный скриншот географии с масштабом {geo_zoom}: {path}")
         
     except Exception as e:
         print(f"⚠️  Ошибка при создании скриншота географии: {e}")
