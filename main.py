@@ -6,7 +6,7 @@ import os
 
 
 def main() -> None:
-    """Полный цикл: загружаем XLSX, делаем скрины постов и VK Ads, формируем Word‑отчёт."""
+    """Полный цикл: загружаем XLSX, делаем скрины постов и VK Ads, формируем Word‑отчёт."""
 
     posts_file = "posts.xlsx"
     output_dir = "assets"
@@ -15,7 +15,7 @@ def main() -> None:
         "https://ads.vk.com/hq/dashboard/ad_groups"
         "?sudo=vkads_3012708486%40mailru"
         "&mode=ads&attribution=conversion"
-        "&date_from=01.04.2025&date_to=04.05.2025"
+        "&date_from=01.06.2025&date_to=18.08.2025"
         "&sort=-created"
     )
 
@@ -36,9 +36,17 @@ def main() -> None:
         if not group_name or group_name in done_groups:
             continue
 
-        print(f"📊 [{idx}/{len(posts)}] VK Ads для группы ‘{group_name}’…")
+        print(f"📊 [{idx}/{len(posts)}] VK Ads для группы '{group_name}'…")
         try:
-            screenshot_group_stats(group_name, output_dir, ads_url)
+            screenshot_group_stats(
+                group_name, 
+                output_dir, 
+                ads_url,
+                demography_zoom=0.6,  # Сильно уменьшенный масштаб для демографии
+                geo_zoom=0.7,         # Уменьшенный масштаб для географии (было 0.8)
+                viewport_width=1920,
+                viewport_height=1200
+            )
             done_groups.add(group_name)
             print("   ✅ Готово")
         except Exception as e:
@@ -46,11 +54,12 @@ def main() -> None:
 
     print("📝 Собираю DOCX…")
     try:
-        generate_report(posts, output_doc, assets_dir=output_dir)
+        generate_report(posts, output_doc, assets_dir=output_dir, inner_image="inner.png")
     except TypeError:
+        # Fallback для старой версии функции
         generate_report(posts, output_doc)
 
-    print(f"🎉 Отчёт сохранён как {output_doc}")
+    print("✅ Отчёт готов!")
 
 
 if __name__ == "__main__":
