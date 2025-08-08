@@ -28,8 +28,8 @@ def generate_report(posts: list[dict],
                 doc.add_picture(post["Скриншот"], width=Inches(5))
 
             # сначала добавляем overview_funnel сразу после поста
-            prefix = post["Группа"].lower()
-            funnel_file = f"{post['Группа']}_overview_funnel.png"
+            prefix = post["Группа"].upper()
+            funnel_file = f"{post['Группа'].upper()}_overview_funnel.png"
             funnel_path = os.path.join(assets_dir, funnel_file)
             if os.path.exists(funnel_path):
                 doc.add_picture(funnel_path, width=Inches(5))
@@ -38,7 +38,7 @@ def generate_report(posts: list[dict],
             # затем все остальные скрины статистики (кроме funnel)
             stats = sorted(
                 f for f in os.listdir(assets_dir)
-                if f.lower().startswith(prefix) and f.lower().endswith(".png")
+                if f.upper().startswith(prefix) and f.lower().endswith(".png")
                 and not f.endswith("_overview_funnel.png")  # исключаем funnel
             )
             for fname in stats:

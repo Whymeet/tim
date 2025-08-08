@@ -476,30 +476,32 @@ def screenshot_group_stats(
                 print(f"⚠️  Ошибка при поиске: {e}")
                 return False
 
-        _apply_search(group_name)
+        # Приводим название группы к верхнему регистру для поиска
+        group_name_upper = group_name.upper()
+        _apply_search(group_name_upper)
         page.wait_for_timeout(2_000)
 
         # Поиск рекламного плана ----------------------------------------
-        print(f"🔍 Ищем рекламный план '{group_name}' в таблице...")
+        print(f"🔍 Ищем рекламный план '{group_name_upper}' в таблице...")
 
         link_selectors = [
-            f"[data-testid='name-link']:has-text('{group_name}')",
-            f"a:has-text('{group_name}')",
+            f"[data-testid='name-link']:has-text('{group_name_upper}')",
+            f"a:has-text('{group_name_upper}')",
             f"[data-testid='name-link']",
-            f"td a:has-text('{group_name}')",
-            f"tr:has-text('{group_name}') [data-testid='name-link']",
+            f"td a:has-text('{group_name_upper}')",
+            f"tr:has-text('{group_name_upper}') [data-testid='name-link']",
         ]
 
         link = None
         for selector in link_selectors:
             link = page.locator(selector).first
-            if link.count() > 0 and group_name in (link.text_content() or ""):
+            if link.count() > 0 and group_name_upper in (link.text_content() or "").upper():
                 print(f"✅ Найден план: {link.text_content().strip()}")
                 break
 
         if not link or link.count() == 0:
             raise RuntimeError(
-                f"❌ Рекламный план '{group_name}' не найден! Проверьте название."
+                f"❌ Рекламный план '{group_name_upper}' не найден! Проверьте название."
             )
 
         # Находим родительскую строку таблицы
@@ -591,24 +593,24 @@ def screenshot_group_stats(
                 funnel = page.locator("div[class^='ConversionsChart_wrap']").first
                 if caption.count() and funnel.count():
                     funnel_path = os.path.join(
-                        output_dir, f"{group_name}_overview_funnel.png"
+                        output_dir, f"{group_name_upper}_overview_funnel.png"
                     )
                     _shot_with_caption(page, caption, funnel, funnel_path)
                     print(f"✅ Воронка сохранена: {funnel_path}")
             elif tab == "demography":
                 # Специальный скриншот для демографии: от названия компании до статистики
-                tab_path = os.path.join(output_dir, f"{group_name}_{tab}.png")
+                tab_path = os.path.join(output_dir, f"{group_name_upper}_{tab}.png")
                 _safe_mkdir(output_dir)
                 _shot_demography_section(page, tab_path, demography_zoom)
             elif tab == "geo":
                 # Специальный скриншот для географии с настраиваемым масштабом
-                tab_path = os.path.join(output_dir, f"{group_name}_{tab}.png")
+                tab_path = os.path.join(output_dir, f"{group_name_upper}_{tab}.png")
                 _safe_mkdir(output_dir)
                 _shot_geo_section(page, tab_path, geo_zoom)
             elif tab != "overview":
                 # Полный скриншот вкладки (только для остальных вкладок)
                 _scroll_to_bottom(page)
-                tab_path = os.path.join(output_dir, f"{group_name}_{tab}.png")
+                tab_path = os.path.join(output_dir, f"{group_name_upper}_{tab}.png")
                 _safe_mkdir(output_dir)
                 page.screenshot(path=tab_path, full_page=True)
                 print(f"✅ Скриншот вкладки сохранён: {tab_path}")

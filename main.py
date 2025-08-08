@@ -32,7 +32,7 @@ def main() -> None:
 
     done_groups: set[str] = set()
     for idx, post in enumerate(posts, 1):
-        group_name = post.get("Группа") or post.get("Название поста") or ""
+        group_name = (post.get("Группа") or post.get("Название поста") or "").upper()
         if not group_name or group_name in done_groups:
             continue
 
