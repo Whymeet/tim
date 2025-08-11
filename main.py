@@ -3,10 +3,33 @@ from vk_screenshot import batch_screenshots
 from ads_screenshot import screenshot_group_stats
 from report_generator import generate_report
 import os
+import logging
+import sys
+from datetime import datetime
 
 
 def main() -> None:
     """Полный цикл: загружаем XLSX, делаем скрины постов и VK Ads, формируем Word‑отчёт."""
+    
+    # Настройка логирования
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_filename = f"vk_ads_log_{timestamp}.txt"
+    
+    # Настраиваем логгер для записи в файл и консоль
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_filename, encoding='utf-8'),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
+    
+    # Создаем логгер
+    logger = logging.getLogger(__name__)
+    
+    logger.info("🚀 Запуск программы VK Ads Report Generator")
+    logger.info(f"📝 Логи записываются в файл: {log_filename}")
 
     posts_file = "posts.xlsx"
     output_dir = "assets"
@@ -20,15 +43,15 @@ def main() -> None:
     )
 
     os.makedirs(output_dir, exist_ok=True)
-    print(f"📁 Рабочая папка: {output_dir}")
+    logger.info(f"📁 Рабочая папка: {output_dir}")
 
-    print("⏳ Читаю таблицу…")
+    logger.info("⏳ Читаю таблицу…")
     posts = load_posts(posts_file)
-    print(f"✅ Найдено {len(posts)} строк / ссылок")
+    logger.info(f"✅ Найдено {len(posts)} строк / ссылок")
 
-    print("📸 Делаю скрины постов…")
+    logger.info("📸 Делаю скрины постов…")
     batch_screenshots(posts, output_dir)
-    print("✅ Скрины постов готовы")
+    logger.info("✅ Скрины постов готовы")
 
     done_groups: set[str] = set()
     for idx, post in enumerate(posts, 1):
@@ -36,7 +59,7 @@ def main() -> None:
         if not group_name or group_name in done_groups:
             continue
 
-        print(f"📊 [{idx}/{len(posts)}] VK Ads для группы '{group_name}'…")
+        logger.info(f"📊 [{idx}/{len(posts)}] VK Ads для группы '{group_name}'…")
         try:
             screenshot_group_stats(
                 group_name, 
@@ -48,18 +71,19 @@ def main() -> None:
                 viewport_height=1200
             )
             done_groups.add(group_name)
-            print("   ✅ Готово")
+            logger.info("   ✅ Готово")
         except Exception as e:
-            print(f"   ⚠️  Не вышло: {e}")
+            logger.error(f"   ⚠️  Не вышло: {e}")
 
-    print("📝 Собираю DOCX…")
+    logger.info("📝 Собираю DOCX…")
     try:
         generate_report(posts, output_doc, assets_dir=output_dir, inner_image="inner.png")
     except TypeError:
         # Fallback для старой версии функции
         generate_report(posts, output_doc)
 
-    print("✅ Отчёт готов!")
+    logger.info("✅ Отчёт готов!")
+    logger.info("🏁 Программа завершена успешно")
 
 
 if __name__ == "__main__":

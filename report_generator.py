@@ -2,6 +2,7 @@ from collections import defaultdict
 from docx import Document
 from docx.shared import Inches
 import os
+import logging
 
 def generate_report(posts: list[dict],
                     output_file: str = "Отчёт.docx",
@@ -33,7 +34,7 @@ def generate_report(posts: list[dict],
             funnel_path = os.path.join(assets_dir, funnel_file)
             if os.path.exists(funnel_path):
                 doc.add_picture(funnel_path, width=Inches(5))
-                print(f"✅ Добавлен overview_funnel для группы: {post['Группа']}")
+                logging.info(f"✅ Добавлен overview_funnel для группы: {post['Группа']}")
 
             # затем все остальные скрины статистики (кроме funnel)
             stats = sorted(
@@ -47,9 +48,9 @@ def generate_report(posts: list[dict],
             # добавляем inner.png в конце каждой рекламной кампании
             if os.path.exists(inner_image):
                 doc.add_picture(inner_image, width=Inches(5))
-                print(f"✅ Добавлен {inner_image} для группы: {post['Группа']}")
+                logging.info(f"✅ Добавлен {inner_image} для группы: {post['Группа']}")
             else:
-                print(f"⚠️  Файл {inner_image} не найден")
+                logging.warning(f"⚠️  Файл {inner_image} не найден")
 
     doc.save(output_file)
-    print(f"📄 Отчёт сохранён: {output_file}")
+    logging.info(f"📄 Отчёт сохранён: {output_file}")

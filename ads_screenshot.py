@@ -2,6 +2,7 @@
 from playwright.sync_api import sync_playwright
 import os
 import time
+import logging
 
 ###############################################################################
 #  VK Ads — automatic screenshots with **strict** ad-plan matching            #
@@ -76,7 +77,7 @@ def _shot_with_topline(page, target, path):
             return
         page.screenshot(path=path, clip=_union_clip(bt, bb))
     except Exception as e:
-        print(f"⚠️  Ошибка при создании скриншота с TopLine: {e}")
+        logging.error(f"⚠️  Ошибка при создании скриншота с TopLine: {e}")
         target.screenshot(path=path)
 
 
@@ -91,7 +92,7 @@ def _shot_with_caption(page, caption, target, path):
             return
         page.screenshot(path=path, clip=_union_clip(bc, bt))
     except Exception as e:
-        print(f"⚠️  Ошибка при создании скриншота с подписью: {e}")
+        logging.error(f"⚠️  Ошибка при создании скриншота с подписью: {e}")
         target.screenshot(path=path)
 
 
@@ -134,7 +135,7 @@ def _shot_demography_section(page, path, demography_zoom=0.6):
             for selector in title_selectors:
                 title_element = page.locator(selector).first
                 if title_element.count():
-                    print(f"✅ Найден заголовок: {selector}")
+                    logging.info(f"✅ Найден заголовок: {selector}")
                     break
             
             # Ищем нижний блок статистики
@@ -149,7 +150,7 @@ def _shot_demography_section(page, path, demography_zoom=0.6):
                 elements = page.locator(selector).all()
                 if elements:
                     bottom_element = elements[-1]  # Берем последний элемент
-                    print(f"✅ Найден нижний блок: {selector}")
+                    logging.info(f"✅ Найден нижний блок: {selector}")
                     break
             
             if title_element and title_element.count() and bottom_element:
@@ -194,14 +195,14 @@ def _shot_demography_section(page, path, demography_zoom=0.6):
                         "height": int(content_height)
                     }
                     
-                    print(f"📐 Область скриншота: x={content_area['x']}, y={content_area['y']}, w={content_area['width']}, h={content_area['height']}")
+                    logging.info(f"📐 Область скриншота: x={content_area['x']}, y={content_area['y']}, w={content_area['width']}, h={content_area['height']}")
                     
                     page.screenshot(path=path, clip=content_area)
-                    print(f"✅ Скриншот демографии (без масштабирования): {path}")
+                    logging.info(f"✅ Скриншот демографии (без масштабирования): {path}")
                     return
         
         # Если не получилось найти элементы, делаем скриншот всего контейнера
-        print("⚠️  Не удалось найти точные элементы, делаем скриншот основного контейнера")
+        logging.warning("⚠️  Не удалось найти точные элементы, делаем скриншот основного контейнера")
         container = page.locator("div[class^='ViewPoints_layout'], div[class^='ViewPoints_main']").first
         if container.count():
             container.scroll_into_view_if_needed()
@@ -211,7 +212,7 @@ def _shot_demography_section(page, path, demography_zoom=0.6):
             page.screenshot(path=path, full_page=True)
         
     except Exception as e:
-        print(f"⚠️  Ошибка при создании скриншота демографии: {e}")
+        logging.error(f"⚠️  Ошибка при создании скриншота демографии: {e}")
         page.screenshot(path=path, full_page=True)
     finally:
         # Восстанавливаем оригинальный масштаб
@@ -243,11 +244,11 @@ def _shot_geo_section(page, path, geo_zoom=0.8):
         
         # Ждем завершения сетевых запросов (карты часто загружаются через API)
         try:
-            print("⏳ Ожидание сетевых запросов...")
+            logging.info("⏳ Ожидание сетевых запросов...")
             page.wait_for_load_state("networkidle", timeout=5000)
-            print("✅ Сетевые запросы завершены")
+            logging.info("✅ Сетевые запросы завершены")
         except Exception:
-            print("⚠️  Timeout сетевых запросов, продолжаем...")
+            logging.warning("⚠️  Timeout сетевых запросов, продолжаем...")
         
         # Ищем основной контейнер географии
         geo_selectors = [
@@ -263,7 +264,7 @@ def _shot_geo_section(page, path, geo_zoom=0.8):
             container = page.locator(selector).first
             if container.count():
                 main_container = container
-                print(f"✅ Найден контейнер географии: {selector}")
+                logging.info(f"✅ Найден контейнер географии: {selector}")
                 break
         
         if main_container:
@@ -272,7 +273,7 @@ def _shot_geo_section(page, path, geo_zoom=0.8):
             page.wait_for_timeout(500)
             
             # Ждем загрузки карты - ищем элементы карты
-            print("⏳ Ожидание загрузки карты...")
+            logging.info("⏳ Ожидание загрузки карты...")
             map_selectors = [
                 "canvas",  # Карты часто рендерятся в canvas
                 "img[src*='map']",  # Изображения карт
@@ -289,18 +290,18 @@ def _shot_geo_section(page, path, geo_zoom=0.8):
                 for selector in map_selectors:
                     map_elements = page.locator(selector)
                     if map_elements.count() > 0:
-                        print(f"✅ Карта найдена: {selector} ({map_elements.count()} элементов)")
+                        logging.info(f"✅ Карта найдена: {selector} ({map_elements.count()} элементов)")
                         map_loaded = True
                         break
                 
                 if map_loaded:
                     break
                     
-                print(f"⏳ Попытка {attempt + 1}/10 - ждем карту...")
+                logging.info(f"⏳ Попытка {attempt + 1}/10 - ждем карту...")
                 page.wait_for_timeout(1000)
             
             if not map_loaded:
-                print("⚠️  Карта не найдена, но продолжаем...")
+                logging.warning("⚠️  Карта не найдена, но продолжаем...")
             
             # Дополнительное ожидание для полной загрузки карты
             page.wait_for_timeout(2000)
@@ -319,7 +320,7 @@ def _shot_geo_section(page, path, geo_zoom=0.8):
             except Exception:
                 pass
             
-            print("✅ Ожидание завершено, создаем скриншот")
+            logging.info("✅ Ожидание завершено, создаем скриншот")
             
             # Получаем координаты контейнера
             container_box = main_container.bounding_box()
@@ -342,25 +343,25 @@ def _shot_geo_section(page, path, geo_zoom=0.8):
                     "height": int(content_height)
                 }
                 
-                print(f"📐 Область скриншота географии: x={content_area['x']}, y={content_area['y']}, w={content_area['width']}, h={content_area['height']}")
+                logging.info(f"📐 Область скриншота географии: x={content_area['x']}, y={content_area['y']}, w={content_area['width']}, h={content_area['height']}")
                 
                 # Принудительная перерисовка для обновления карт
                 page.evaluate("window.dispatchEvent(new Event('resize'))")
                 page.wait_for_timeout(500)
                 
                 page.screenshot(path=path, clip=content_area)
-                print(f"✅ Скриншот географии с масштабом {geo_zoom}: {path}")
+                logging.info(f"✅ Скриншот географии с масштабом {geo_zoom}: {path}")
                 return
             else:
                 # Fallback: скриншот контейнера
                 main_container.screenshot(path=path)
-                print(f"✅ Скриншот контейнера географии с масштабом {geo_zoom}: {path}")
+                logging.info(f"✅ Скриншот контейнера географии с масштабом {geo_zoom}: {path}")
                 return
         
         # Если контейнер не найден, делаем полный скриншот
-        print("⚠️  Контейнер географии не найден, делаем полный скриншот")
+        logging.warning("⚠️  Контейнер географии не найден, делаем полный скриншот")
         page.screenshot(path=path, full_page=True)
-        print(f"✅ Полный скриншот географии с масштабом {geo_zoom}: {path}")
+        logging.info(f"✅ Полный скриншот географии с масштабом {geo_zoom}: {path}")
         
     except Exception as e:
         print(f"⚠️  Ошибка при создании скриншота географии: {e}")
@@ -403,7 +404,7 @@ def screenshot_group_stats(
 
     # Убеждаемся, что папка существует
     _safe_mkdir(output_dir)
-    print(f"📁 Папка {output_dir} создана/проверена")
+    logging.info(f"📁 Папка {output_dir} создана/проверена")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
@@ -417,7 +418,7 @@ def screenshot_group_stats(
         try:
             page.wait_for_load_state("networkidle", timeout=10_000)
         except Exception:
-            print("⚠️  networkidle wasn't reached – continuing …")
+            logging.warning("⚠️  networkidle wasn't reached – continuing …")
         
         # Устанавливаем масштаб страницы для лучшего отображения графиков
         page.evaluate(f"document.body.style.zoom = '{zoom_level}'")
@@ -425,13 +426,13 @@ def screenshot_group_stats(
 
         # Captcha -----------------------------------------------------------
         if _is_captcha(page):
-            print("🛑 Captcha detected – solve it …")
+            logging.warning("🛑 Captcha detected – solve it …")
             page.wait_for_timeout(30_000)
             ctx.storage_state(path="vk_storage.json")
 
         # Search ------------------------------------------------------------
         def _apply_search(q: str):
-            print(f"🔍 Поиск рекламного плана: '{q}'")
+            logging.info(f"🔍 Поиск рекламного плана: '{q}'")
 
             search_selectors = [
                 "input[type='search']",
@@ -446,11 +447,11 @@ def screenshot_group_stats(
             for selector in search_selectors:
                 inp = page.locator(selector).first
                 if inp.count() > 0:
-                    print(f"✅ Найдено поле поиска: {selector}")
+                    logging.info(f"✅ Найдено поле поиска: {selector}")
                     break
 
             if not inp or inp.count() == 0:
-                print("❌ Поле поиска не найдено, попробуем продолжить без поиска")
+                logging.error("❌ Поле поиска не найдено, попробуем продолжить без поиска")
                 return False
 
             try:
@@ -469,11 +470,11 @@ def screenshot_group_stats(
                 if contains.count():
                     contains.click()
                     page.wait_for_timeout(1_000)
-                    print("✅ Выбран вариант 'содержит'")
+                    logging.info("✅ Выбран вариант 'содержит'")
 
                 return True
             except Exception as e:
-                print(f"⚠️  Ошибка при поиске: {e}")
+                logging.error(f"⚠️  Ошибка при поиске: {e}")
                 return False
 
         # Приводим название группы к верхнему регистру для поиска
@@ -482,7 +483,7 @@ def screenshot_group_stats(
         page.wait_for_timeout(2_000)
 
         # Поиск рекламного плана ----------------------------------------
-        print(f"🔍 Ищем рекламный план '{group_name_upper}' в таблице...")
+        logging.info(f"🔍 Ищем рекламный план '{group_name_upper}' в таблице...")
 
         link_selectors = [
             f"[data-testid='name-link']:has-text('{group_name_upper}')",
@@ -496,7 +497,7 @@ def screenshot_group_stats(
         for selector in link_selectors:
             link = page.locator(selector).first
             if link.count() > 0 and group_name_upper in (link.text_content() or "").upper():
-                print(f"✅ Найден план: {link.text_content().strip()}")
+                logging.info(f"✅ Найден план: {link.text_content().strip()}")
                 break
 
         if not link or link.count() == 0:
@@ -513,18 +514,18 @@ def screenshot_group_stats(
             row.scroll_into_view_if_needed(timeout=10_000)
             page.wait_for_timeout(400)
         except Exception as e:
-            print(f"⚠️  Ошибка при прокрутке к строке: {e}")
+            logging.warning(f"⚠️  Ошибка при прокрутке к строке: {e}")
 
         # ─── Новое: ховерим строку, чтобы появились иконки действий ────
         try:
             row.hover(timeout=5_000)
             page.wait_for_timeout(300)
-            print("🖱️  Навели курсор на строку плана — иконки должны появиться")
+            logging.info("🖱️  Навели курсор на строку плана — иконки должны появиться")
         except Exception as e:
-            print(f"⚠️  Не удалось навести курсор на строку: {e}")
+            logging.warning(f"⚠️  Не удалось навести курсор на строку: {e}")
 
         # Поиск кнопки статистики --------------------------------------
-        print("📊 Открываем статистику...")
+        logging.info("📊 Открываем статистику...")
 
         stats_selectors = [
             "a[data-testid='stats']",
@@ -541,7 +542,7 @@ def screenshot_group_stats(
             for sel in stats_selectors:
                 btn = scope.locator(sel).first
                 if btn.count() > 0:
-                    print(f"✅ Найдена кнопка статистики: {sel}")
+                    logging.info(f"✅ Найдена кнопка статистики: {sel}")
                     return btn
             return None
 
@@ -549,10 +550,10 @@ def screenshot_group_stats(
         if not btn:
             # Быстрая диагностика: покажем, какие svg-иконки есть в строке
             svgs = row.locator("svg").all()
-            print(f"❔ В строке найдено SVG-иконок: {len(svgs)}")
+            logging.warning(f"❔ В строке найдено SVG-иконок: {len(svgs)}")
             for i, svg in enumerate(svgs[:5], 1):
                 try:
-                    print(f"  {i}. {svg.get_attribute('class')}")
+                    logging.info(f"  {i}. {svg.get_attribute('class')}")
                 except Exception:
                     pass
             raise RuntimeError(
@@ -562,7 +563,7 @@ def screenshot_group_stats(
         try:
             btn.click()
             page.wait_for_timeout(4_000)
-            print("✅ Статистика открыта")
+            logging.info("✅ Статистика открыта")
         except Exception as e:
             raise RuntimeError(f"⚠️  Ошибка при клике на статистику: {e}") from e
 
@@ -571,20 +572,20 @@ def screenshot_group_stats(
 
         # Iterate tabs --------------------------------------------------
         for tab in tabs or ("overview",):
-            print(f"📑 Обрабатываем вкладку: {tab}")
+            logging.info(f"📑 Обрабатываем вкладку: {tab}")
 
             tab_btn = page.locator(f"#tab_{tab}")
             if tab_btn.count():
                 tab_btn.click()
                 if tab == "geo":
                     # Дополнительное ожидание для географии (карты загружаются дольше)
-                    print("⏳ Дополнительное ожидание для загрузки карт...")
+                    logging.info("⏳ Дополнительное ожидание для загрузки карт...")
                     page.wait_for_timeout(3_000)
                 else:
                     page.wait_for_timeout(1_000)
-                print(f"✅ Вкладка {tab} открыта")
+                logging.info(f"✅ Вкладка {tab} открыта")
             else:
-                print(f"⚠️  Вкладка '{tab}' не найдена – пропускаем")
+                logging.warning(f"⚠️  Вкладка '{tab}' не найдена – пропускаем")
                 continue
 
             if tab == "overview":
@@ -596,7 +597,7 @@ def screenshot_group_stats(
                         output_dir, f"{group_name_upper}_overview_funnel.png"
                     )
                     _shot_with_caption(page, caption, funnel, funnel_path)
-                    print(f"✅ Воронка сохранена: {funnel_path}")
+                    logging.info(f"✅ Воронка сохранена: {funnel_path}")
             elif tab == "demography":
                 # Специальный скриншот для демографии: от названия компании до статистики
                 tab_path = os.path.join(output_dir, f"{group_name_upper}_{tab}.png")
@@ -613,7 +614,7 @@ def screenshot_group_stats(
                 tab_path = os.path.join(output_dir, f"{group_name_upper}_{tab}.png")
                 _safe_mkdir(output_dir)
                 page.screenshot(path=tab_path, full_page=True)
-                print(f"✅ Скриншот вкладки сохранён: {tab_path}")
+                logging.info(f"✅ Скриншот вкладки сохранён: {tab_path}")
 
-        print("✅ Все скриншоты VK Ads созданы успешно")
+        logging.info("✅ Все скриншоты VK Ads созданы успешно")
         browser.close()

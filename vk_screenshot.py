@@ -1,5 +1,6 @@
 import os
 import json
+import logging
 from playwright.sync_api import sync_playwright
 from screenshot_utils import draw_browser_bar
 
@@ -17,11 +18,11 @@ def take_screenshot_with_views(url, output_file):
         context.add_cookies(cookies)
 
         page = context.new_page()
-        print(f"Открываю пост: {url}")
+        logging.info(f"Открываю пост: {url}")
         try:
             page.goto(url, timeout=60000, wait_until="domcontentloaded")
         except Exception as e:
-            print(f"Ошибка загрузки страницы: {e}")
+            logging.error(f"Ошибка загрузки страницы: {e}")
             browser.close()
             return
 
@@ -33,7 +34,7 @@ def take_screenshot_with_views(url, output_file):
                 date_elem.hover()
                 page.wait_for_timeout(1500)
         except Exception as e:
-            print(f"Ошибка при наведении на дату: {e}")
+            logging.warning(f"Ошибка при наведении на дату: {e}")
 
         try:
             post = page.locator('.Post, .wall_post_text, .post')
@@ -55,14 +56,14 @@ def take_screenshot_with_views(url, output_file):
                     }
                     
                     page.screenshot(path=output_file, clip=expanded_area)
-                    print(f"📸 Расширенный скриншот поста: {output_file}")
+                    logging.info(f"📸 Расширенный скриншот поста: {output_file}")
                 else:
                     # Fallback: скриншот элемента поста
                     post.first.screenshot(path=output_file)
             else:
                 page.screenshot(path=output_file, full_page=True)
         except Exception as e:
-            print(f"Ошибка при создании скрина: {e}")
+            logging.error(f"Ошибка при создании скрина: {e}")
         finally:
             browser.close()
 
@@ -74,6 +75,6 @@ def batch_screenshots(posts, output_dir):
         url = post['Ссылка']
         file_name = f"post_{i+1}.png"
         file_path = os.path.join(output_dir, file_name)
-        print(f"[{i+1}/{len(posts)}] Скриншот: {url} -> {file_path}")
+        logging.info(f"[{i+1}/{len(posts)}] Скриншот: {url} -> {file_path}")
         take_screenshot_with_views(url, file_path)
         post['Скриншот'] = file_path
