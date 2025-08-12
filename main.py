@@ -49,17 +49,41 @@ def main() -> None:
     posts = load_posts(posts_file)
     logger.info(f"✅ Найдено {len(posts)} строк / ссылок")
 
+    # Фильтруем строки - оставляем только с корректными названиями групп
+    valid_posts = []
+    skipped_count = 0
+    
+    for idx, post in enumerate(posts, 1):
+        group_name = (post.get("Группа") or "").strip()
+        
+        # Проверяем, что название группы содержит "ЦР25"
+        if not group_name or "ЦР25" not in group_name.upper():
+            skipped_count += 1
+            logger.error(f"SKIPPED_NO_GROUP_NAME: [{idx}] Ссылка {post.get('Ссылка', 'N/A')} - название группы '{group_name}' не содержит ЦР25, пропускаю")
+            continue
+            
+        valid_posts.append(post)
+    
+    if skipped_count > 0:
+        logger.warning(f"⚠️  Пропущено {skipped_count} строк без ЦР25 в названии. Ищите по 'SKIPPED_NO_GROUP_NAME' для просмотра")
+    
+    logger.info(f"✅ К обработке: {len(valid_posts)} строк с ЦР25 в названии групп")
+
+    if not valid_posts:
+        logger.error("❌ Не найдено ни одной строки с ЦР25 в названии группы!")
+        return
+
     logger.info("📸 Делаю скрины постов…")
-    batch_screenshots(posts, output_dir)
+    batch_screenshots(valid_posts, output_dir)
     logger.info("✅ Скрины постов готовы")
 
     done_groups: set[str] = set()
-    for idx, post in enumerate(posts, 1):
-        group_name = (post.get("Группа") or post.get("Название поста") or "").upper()
-        if not group_name or group_name in done_groups:
+    for idx, post in enumerate(valid_posts, 1):
+        group_name = post.get("Группа", "").upper()
+        if group_name in done_groups:
             continue
 
-        logger.info(f"📊 [{idx}/{len(posts)}] VK Ads для группы '{group_name}'…")
+        logger.info(f"📊 [{idx}/{len(valid_posts)}] VK Ads для группы '{group_name}'…")
         try:
             screenshot_group_stats(
                 group_name, 
@@ -77,7 +101,7 @@ def main() -> None:
 
     logger.info("📝 Собираю DOCX…")
     try:
-        generate_report(posts, output_doc, assets_dir=output_dir, inner_image="inner.png")
+        generate_report(valid_posts, output_doc, assets_dir=output_dir, inner_image="inner.png")
     except TypeError:
         # Fallback для старой версии функции
         generate_report(posts, output_doc)
