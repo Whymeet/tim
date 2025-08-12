@@ -4,3 +4,4 @@ openpyxl
 python-docx
 pillow
 requests
+urllib3

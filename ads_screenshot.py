@@ -3,6 +3,7 @@ from playwright.sync_api import sync_playwright
 import os
 import time
 import logging
+from config import get_proxy_config, get_browser_config, get_timeouts, get_vk_ads_config
 
 ###############################################################################
 #  VK Ads — automatic screenshots with **strict** ad-plan matching            #
@@ -402,21 +403,54 @@ def screenshot_group_stats(
         geo_zoom: Масштаб для географии (по умолчанию 0.8)
     """
 
+    # Получаем конфигурации
+    proxy_config = get_proxy_config()
+    browser_config = get_browser_config()
+    timeouts = get_timeouts()
+    vk_ads_config = get_vk_ads_config()
+    
+    # Используем настройки из конфигурации, если параметры не переданы явно
+    if demography_zoom == 0.6:  # Значение по умолчанию
+        demography_zoom = vk_ads_config["demography_zoom"]
+    if geo_zoom == 0.8:  # Значение по умолчанию 
+        geo_zoom = vk_ads_config["geo_zoom"]
+    if zoom_level == 0.8:  # Значение по умолчанию
+        zoom_level = vk_ads_config["overview_zoom"]
+
     # Убеждаемся, что папка существует
     _safe_mkdir(output_dir)
     logging.info(f"📁 Папка {output_dir} создана/проверена")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
-        ctx = browser.new_context(
-            storage_state="vk_storage.json", viewport={"width": viewport_width, "height": viewport_height}
-        )
+        # Конфигурация запуска браузера
+        launch_args = {"headless": browser_config["headless"]}
+        
+        # Добавляем прокси если он настроен
+        if proxy_config:
+            launch_args["proxy"] = proxy_config
+            logging.info(f"🌐 Используется прокси для VK Ads: {proxy_config['server']}")
+        else:
+            logging.info("🌐 Прокси для VK Ads не используется")
+            
+        browser = p.chromium.launch(**launch_args)
+        
+        # Создаем контекст с настройками
+        context_args = {
+            "storage_state": "vk_storage.json", 
+            "viewport": {"width": viewport_width, "height": viewport_height}
+        }
+        
+        # Добавляем user agent если указан
+        if browser_config.get("user_agent"):
+            context_args["user_agent"] = browser_config["user_agent"]
+            
+        ctx = browser.new_context(**context_args)
         page = ctx.new_page()
 
         print(f"➡️  Opening VK Ads: {ads_url}")
-        page.goto(ads_url, timeout=60_000)
+        page.goto(ads_url, timeout=timeouts["page_load"])
         try:
-            page.wait_for_load_state("networkidle", timeout=10_000)
+            page.wait_for_load_state("networkidle", timeout=timeouts["network_idle"])
         except Exception:
             logging.warning("⚠️  networkidle wasn't reached – continuing …")
         

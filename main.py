@@ -2,6 +2,7 @@ from post_loader import load_posts
 from vk_screenshot import batch_screenshots
 from ads_screenshot import screenshot_group_stats
 from report_generator import generate_report
+from config import get_vk_ads_config, get_proxy_config
 import os
 import logging
 import sys
@@ -30,6 +31,13 @@ def main() -> None:
     
     logger.info("🚀 Запуск программы VK Ads Report Generator")
     logger.info(f"📝 Логи записываются в файл: {log_filename}")
+    
+    # Проверяем настройки прокси
+    proxy_config = get_proxy_config()
+    if proxy_config:
+        logger.info(f"🌐 Прокси включен: {proxy_config['server']}")
+    else:
+        logger.info("🌐 Прокси отключен")
 
     posts_file = "posts.xlsx"
     output_dir = "assets"
@@ -41,6 +49,9 @@ def main() -> None:
         "&date_from=01.06.2025&date_to=18.08.2025"
         "&sort=-created"
     )
+    
+    # Получаем настройки VK Ads из конфигурации
+    vk_ads_config = get_vk_ads_config()
 
     os.makedirs(output_dir, exist_ok=True)
     logger.info(f"📁 Рабочая папка: {output_dir}")
@@ -89,8 +100,8 @@ def main() -> None:
                 group_name, 
                 output_dir, 
                 ads_url,
-                demography_zoom=0.6,  # Сильно уменьшенный масштаб для демографии
-                geo_zoom=0.7,         # Уменьшенный масштаб для географии (было 0.8)
+                demography_zoom=vk_ads_config["demography_zoom"],
+                geo_zoom=vk_ads_config["geo_zoom"], 
                 viewport_width=1920,
                 viewport_height=1200
             )
