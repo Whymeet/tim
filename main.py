@@ -78,6 +78,8 @@ def main() -> None:
     logger.info("✅ Скрины постов готовы")
 
     done_groups: set[str] = set()
+    successful_groups: set[str] = set()  # Отслеживаем успешно обработанные группы
+    
     for idx, post in enumerate(valid_posts, 1):
         group_name = post.get("Группа", "").upper()
         if group_name in done_groups:
@@ -95,16 +97,34 @@ def main() -> None:
                 viewport_height=1200
             )
             done_groups.add(group_name)
-            logger.info("   ✅ Готово")
+            successful_groups.add(group_name)  # Добавляем в успешные
+            logger.info(f"   ✅ Готово - группа {group_name} добавлена в отчет")
         except Exception as e:
-            logger.error(f"   ⚠️  Не вышло: {e}")
+            logger.error(f"   ❌ Не вышло: {e}")
+            logger.warning(f"   🚫 Группа {group_name} НЕ будет включена в отчет")
+            done_groups.add(group_name)  # Помечаем как обработанную, но НЕ как успешную
 
-    logger.info("📝 Собираю DOCX…")
+    # Фильтруем посты - оставляем только те, для которых успешно создали скрины статистики
+    posts_for_report = []
+    skipped_campaigns = 0
+    
+    for post in valid_posts:
+        group_name = post.get("Группа", "").upper()
+        if group_name in successful_groups:
+            posts_for_report.append(post)
+        else:
+            skipped_campaigns += 1
+            logger.warning(f"🚫 Пропускаю кампанию '{post.get('Группа', 'N/A')}' из отчета - не удалось получить статистику")
+    
+    if skipped_campaigns > 0:
+        logger.warning(f"⚠️  Пропущено {skipped_campaigns} кампаний из отчета из-за ошибок статистики")
+    
+    logger.info(f"📝 Собираю DOCX для {len(posts_for_report)} успешных кампаний…")
     try:
-        generate_report(valid_posts, output_doc, assets_dir=output_dir, inner_image="inner.png")
+        generate_report(posts_for_report, output_doc, assets_dir=output_dir, inner_image="inner.png")
     except TypeError:
         # Fallback для старой версии функции
-        generate_report(posts, output_doc)
+        generate_report(posts_for_report, output_doc)
 
     logger.info("✅ Отчёт готов!")
     logger.info("🏁 Программа завершена успешно")

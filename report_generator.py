@@ -28,12 +28,16 @@ def generate_report(posts: list[dict],
             if os.path.exists(post.get("Скриншот", "")):
                 doc.add_picture(post["Скриншот"], width=Inches(5))
 
-            # сначала добавляем overview_funnel сразу после поста
+            # Проверяем, есть ли файлы статистики для этой группы
             prefix = post["Группа"].upper()
+            has_stats = False
+            
+            # сначала добавляем overview_funnel сразу после поста
             funnel_file = f"{post['Группа'].upper()}_overview_funnel.png"
             funnel_path = os.path.join(assets_dir, funnel_file)
             if os.path.exists(funnel_path):
                 doc.add_picture(funnel_path, width=Inches(5))
+                has_stats = True
                 logging.info(f"✅ Добавлен overview_funnel для группы: {post['Группа']}")
 
             # затем все остальные скрины статистики (кроме funnel)
@@ -44,13 +48,17 @@ def generate_report(posts: list[dict],
             )
             for fname in stats:
                 doc.add_picture(os.path.join(assets_dir, fname), width=Inches(5))
+                has_stats = True
 
-            # добавляем inner.png в конце каждой рекламной кампании
-            if os.path.exists(inner_image):
-                doc.add_picture(inner_image, width=Inches(5))
-                logging.info(f"✅ Добавлен {inner_image} для группы: {post['Группа']}")
+            # добавляем inner.png ТОЛЬКО если есть файлы статистики
+            if has_stats:
+                if os.path.exists(inner_image):
+                    doc.add_picture(inner_image, width=Inches(5))
+                    logging.info(f"✅ Добавлен {inner_image} для группы: {post['Группа']}")
+                else:
+                    logging.warning(f"⚠️  Файл {inner_image} не найден")
             else:
-                logging.warning(f"⚠️  Файл {inner_image} не найден")
+                logging.warning(f"🚫 Не добавляю {inner_image} для группы {post['Группа']} - нет файлов статистики")
 
     doc.save(output_file)
     logging.info(f"📄 Отчёт сохранён: {output_file}")
