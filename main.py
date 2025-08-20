@@ -91,8 +91,8 @@ def main() -> None:
                 group_name, 
                 output_dir, 
                 ads_url,
-                demography_zoom=0.6,  # Сильно уменьшенный масштаб для демографии
-                geo_zoom=0.7,         # Уменьшенный масштаб для географии (было 0.8)
+                demography_zoom=1.0,  # Без масштабирования для демографии
+                geo_zoom=1.0,         # Без масштабирования для географии
                 viewport_width=1920,
                 viewport_height=1200
             )

@@ -96,38 +96,49 @@ def _shot_with_caption(page, caption, target, path):
         target.screenshot(path=path)
 
 
-def _shot_demography_section(page, path, demography_zoom=0.6):
+def _shot_demography_section(page, path, demography_zoom=1.0):
     """Специальный скриншот для демографии: от названия компании до нижней статистики
     
     Args:
         page: Playwright page объект
         path: Путь для сохранения скриншота
-        demography_zoom: Масштаб для демографии (по умолчанию 0.6)
+        demography_zoom: Масштаб для демографии (по умолчанию 1.0 - без масштабирования)
     """
     try:
-        # Сохраняем текущий масштаб
-        original_zoom = page.evaluate("document.body.style.zoom")
-        
-        # Устанавливаем масштаб для демографии
-        page.evaluate(f"document.body.style.zoom = '{demography_zoom}'")
-        page.wait_for_timeout(1000)  # Ждем применения масштаба
+        # Сохраняем текущий масштаб только если нужно изменить
+        original_zoom = None
+        if demography_zoom != 1.0:
+            original_zoom = page.evaluate("document.body.style.zoom")
+            page.evaluate(f"document.body.style.zoom = '{demography_zoom}'")
+            page.wait_for_timeout(500)  # Уменьшено время ожидания
         # Прокручиваем в самый верх страницы
         page.evaluate("window.scrollTo(0, 0)")
         page.wait_for_timeout(300)
         
-        # Ищем весь контейнер со статистикой
-        main_container = page.locator("div[class^='ViewPoints_layout']").first
+        # Ищем основной контейнер демографии - более точные селекторы
+        main_container_selectors = [
+            "div[class*='ViewPoints'][class*='layout']",
+            "div.ViewPoints\\.module_layout__YWJjY", 
+            "div[class^='ViewPoints_layout']",
+            "div[class^='ViewPoints_main']"
+        ]
         
-        if main_container.count():
-            # Прокручиваем к контейнеру
-            main_container.scroll_into_view_if_needed()
-            page.wait_for_timeout(500)
+        main_container = None
+        for selector in main_container_selectors:
+            container = page.locator(selector).first
+            if container.count():
+                main_container = container
+                logging.info(f"✅ Найден контейнер демографии: {selector}")
+                break
+        
+        if main_container:
+            # Ждем загрузки контента
+            page.wait_for_timeout(1000)
             
-            # Ищем заголовок с названием компании более широко
+            # Находим заголовок с названием кампании 
             title_selectors = [
-                "span[class^='TopLine_title']:has-text('ЦР25')",
-                "span.vkuiTitle:has-text('ЦР25')",
-                "[class*='title']:has-text('ЦР25')",
+                "span[class*='TopLine'][class*='title']:has-text('ЦР25')",
+                "span.TopLine\\.module_title__XzA2Y:has-text('ЦР25')",
                 "span:has-text('ЦР25_')"
             ]
             
@@ -138,23 +149,27 @@ def _shot_demography_section(page, path, demography_zoom=0.6):
                     logging.info(f"✅ Найден заголовок: {selector}")
                     break
             
-            # Ищем нижний блок статистики
+            # Ищем нижние блоки статистики - более широкий поиск
             bottom_selectors = [
-                "div[class^='Compare_layout']",
-                "div[class^='Demography_wrap']",
-                "div[class*='demography']"
+                "div[class*='Compare'][class*='layout']",
+                "div.Compare\\.module_layout__YzVmZ",
+                "div[class*='Demography'][class*='wrap']", 
+                "div.Demography\\.module_wrap__YjkyN"
             ]
             
-            bottom_element = None
+            bottom_elements = []
             for selector in bottom_selectors:
                 elements = page.locator(selector).all()
-                if elements:
-                    bottom_element = elements[-1]  # Берем последний элемент
-                    logging.info(f"✅ Найден нижний блок: {selector}")
-                    break
+                bottom_elements.extend(elements)
+            
+            if bottom_elements:
+                logging.info(f"✅ Найдено {len(bottom_elements)} блоков статистики")
+                bottom_element = bottom_elements[-1]  # Берем последний элемент
+            else:
+                bottom_element = None
             
             if title_element and title_element.count() and bottom_element:
-                # Прокручиваем к заголовку
+                # Прокручиваем к заголовку 
                 title_element.scroll_into_view_if_needed()
                 page.wait_for_timeout(300)
                 
@@ -163,31 +178,23 @@ def _shot_demography_section(page, path, demography_zoom=0.6):
                 bottom_box = bottom_element.bounding_box()
                 
                 if title_box and bottom_box:
-                    # Получаем размеры страницы для корректных границ
-                    page_width = page.evaluate("document.documentElement.scrollWidth")
-                    page_height = page.evaluate("document.documentElement.scrollHeight")
+                    # Определяем оптимальную область скриншота
                     viewport_width = page.evaluate("window.innerWidth")
                     
-                    # Находим оптимальную ширину для контента демографии
-                    demo_container = page.locator("div[class^='Demography_wrap'], div[class^='ViewPoints_panel']").first
-                    container_box = demo_container.bounding_box() if demo_container.count() else None
+                    # Находим левую границу по контенту
+                    content_left = min(title_box["x"], bottom_box["x"])
+                    start_x = max(0, content_left - 20)  # Минимальный отступ
                     
-                    # Определяем область более аккуратно
-                    if container_box:
-                        # Используем границы контейнера с небольшими отступами
-                        start_x = max(0, container_box["x"] - 20)
-                        content_width = min(container_box["width"] + 40, page_width - start_x)
-                    else:
-                        # Fallback: центрируем относительно заголовка
-                        start_x = max(0, title_box["x"] - 100)
-                        content_width = min(800, page_width - start_x)
+                    # Ширина захватывает весь видимый контент
+                    content_right = max(title_box["x"] + title_box["width"], 
+                                      bottom_box["x"] + bottom_box["width"])
+                    content_width = min(content_right - start_x + 40, viewport_width - start_x)
                     
-                    # Определяем высоту строго по контенту
-                    start_y = max(0, title_box["y"] - 50)
-                    end_y = min(bottom_box["y"] + bottom_box["height"] + 30, page_height)
+                    # Высота строго по контенту
+                    start_y = max(0, title_box["y"] - 20)
+                    end_y = bottom_box["y"] + bottom_box["height"] + 20
                     content_height = end_y - start_y
                     
-                    # Создаем область только с реальным контентом
                     content_area = {
                         "x": int(start_x),
                         "y": int(start_y),
@@ -195,48 +202,51 @@ def _shot_demography_section(page, path, demography_zoom=0.6):
                         "height": int(content_height)
                     }
                     
-                    logging.info(f"📐 Область скриншота: x={content_area['x']}, y={content_area['y']}, w={content_area['width']}, h={content_area['height']}")
+                    logging.info(f"📐 Область демографии: x={content_area['x']}, y={content_area['y']}, w={content_area['width']}, h={content_area['height']}")
                     
                     page.screenshot(path=path, clip=content_area)
-                    logging.info(f"✅ Скриншот демографии (без масштабирования): {path}")
+                    logging.info(f"✅ Скриншот демографии: {path}")
                     return
         
-        # Если не получилось найти элементы, делаем скриншот всего контейнера
+        # Если не получилось найти точные элементы, делаем скриншот основного контейнера
         logging.warning("⚠️  Не удалось найти точные элементы, делаем скриншот основного контейнера")
-        container = page.locator("div[class^='ViewPoints_layout'], div[class^='ViewPoints_main']").first
-        if container.count():
-            container.scroll_into_view_if_needed()
+        if main_container:
+            main_container.scroll_into_view_if_needed()
             page.wait_for_timeout(300)
-            container.screenshot(path=path)
+            main_container.screenshot(path=path)
+            logging.info(f"✅ Скриншот контейнера демографии: {path}")
         else:
-            page.screenshot(path=path, full_page=True)
+            # Последний fallback - весь viewport
+            page.screenshot(path=path)
+            logging.info(f"✅ Скриншот страницы демографии: {path}")
         
     except Exception as e:
         logging.error(f"⚠️  Ошибка при создании скриншота демографии: {e}")
-        page.screenshot(path=path, full_page=True)
+        page.screenshot(path=path)
     finally:
-        # Восстанавливаем оригинальный масштаб
-        try:
-            page.evaluate(f"document.body.style.zoom = '{original_zoom if original_zoom else 'initial'}'")
-        except:
-            pass
+        # Восстанавливаем оригинальный масштаб если он был изменен
+        if original_zoom is not None:
+            try:
+                page.evaluate(f"document.body.style.zoom = '{original_zoom if original_zoom else 'initial'}'")
+            except:
+                pass
 
 
-def _shot_geo_section(page, path, geo_zoom=0.8):
+def _shot_geo_section(page, path, geo_zoom=1.0):
     """Специальный скриншот для географии с настраиваемым масштабом
     
     Args:
         page: Playwright page объект
         path: Путь для сохранения скриншота
-        geo_zoom: Масштаб для географии (по умолчанию 0.8)
+        geo_zoom: Масштаб для географии (по умолчанию 1.0 - без масштабирования)
     """
     try:
-        # Сохраняем текущий масштаб
-        original_zoom = page.evaluate("document.body.style.zoom")
-        
-        # Устанавливаем масштаб для географии
-        page.evaluate(f"document.body.style.zoom = '{geo_zoom}'")
-        page.wait_for_timeout(1000)  # Ждем применения масштаба
+        # Сохраняем текущий масштаб только если нужно изменить
+        original_zoom = None
+        if geo_zoom != 1.0:
+            original_zoom = page.evaluate("document.body.style.zoom")
+            page.evaluate(f"document.body.style.zoom = '{geo_zoom}'")
+            page.wait_for_timeout(500)
         
         # Прокручиваем в самый верх страницы
         page.evaluate("window.scrollTo(0, 0)")
@@ -245,22 +255,21 @@ def _shot_geo_section(page, path, geo_zoom=0.8):
         # Ждем завершения сетевых запросов (карты часто загружаются через API)
         try:
             logging.info("⏳ Ожидание сетевых запросов...")
-            page.wait_for_load_state("networkidle", timeout=5000)
+            page.wait_for_load_state("networkidle", timeout=3000)
             logging.info("✅ Сетевые запросы завершены")
         except Exception:
             logging.warning("⚠️  Timeout сетевых запросов, продолжаем...")
         
-        # Ищем основной контейнер географии
-        geo_selectors = [
+        # Ищем основной контейнер географии - более точные селекторы
+        geo_container_selectors = [
+            "div[class*='ViewPoints'][class*='layout']",
+            "div.ViewPoints\\.module_layout__YWJjY",
             "div[class^='ViewPoints_layout']",
-            "div[class^='ViewPoints_main']", 
-            "div[class*='geography']",
-            "div[class*='Geography']",
-            "div[class*='geo']"
+            "div[class^='ViewPoints_main']"
         ]
         
         main_container = None
-        for selector in geo_selectors:
+        for selector in geo_container_selectors:
             container = page.locator(selector).first
             if container.count():
                 main_container = container
@@ -275,18 +284,16 @@ def _shot_geo_section(page, path, geo_zoom=0.8):
             # Ждем загрузки карты - ищем элементы карты
             logging.info("⏳ Ожидание загрузки карты...")
             map_selectors = [
-                "canvas",  # Карты часто рендерятся в canvas
-                "img[src*='map']",  # Изображения карт
-                "div[class*='map']",  # Контейнеры карт
-                "div[class*='Map']",
-                "[class*='leaflet']",  # Leaflet карты
-                "[class*='mapbox']",   # Mapbox карты
-                "[class*='google-map']" # Google Maps
+                "canvas.mmrgl-canvas",  # Специфический класс для VK Maps
+                "div.mmrgl-map",        # Контейнер карты
+                "canvas",               # Общий canvas элемент
+                "div[class*='GeoMap']", # Контейнер географической карты
+                "div[class*='map']"     # Любой контейнер с map
             ]
             
-            # Ждем появления любого элемента карты
+            # Ждем появления карты
             map_loaded = False
-            for attempt in range(10):  # Максимум 10 попыток (10 секунд)
+            for attempt in range(8):  # Уменьшено до 8 попыток (8 секунд)
                 for selector in map_selectors:
                     map_elements = page.locator(selector)
                     if map_elements.count() > 0:
@@ -297,16 +304,16 @@ def _shot_geo_section(page, path, geo_zoom=0.8):
                 if map_loaded:
                     break
                     
-                logging.info(f"⏳ Попытка {attempt + 1}/10 - ждем карту...")
+                logging.info(f"⏳ Попытка {attempt + 1}/8 - ждем карту...")
                 page.wait_for_timeout(1000)
             
             if not map_loaded:
                 logging.warning("⚠️  Карта не найдена, но продолжаем...")
             
             # Дополнительное ожидание для полной загрузки карты
-            page.wait_for_timeout(2000)
+            page.wait_for_timeout(1500)
             
-            # Попытка принудительно обновить карты через JavaScript
+            # Принудительное обновление карт через JavaScript
             try:
                 page.evaluate("""
                     // Принудительное обновление карт
@@ -315,6 +322,8 @@ def _shot_geo_section(page, path, geo_zoom=0.8):
                         if (el.style) el.style.display = 'none';
                         setTimeout(() => { if (el.style) el.style.display = ''; }, 100);
                     });
+                    // Trigger resize event
+                    window.dispatchEvent(new Event('resize'));
                 """)
                 page.wait_for_timeout(1000)
             except Exception:
@@ -322,19 +331,19 @@ def _shot_geo_section(page, path, geo_zoom=0.8):
             
             logging.info("✅ Ожидание завершено, создаем скриншот")
             
-            # Получаем координаты контейнера
+            # Получаем координаты контейнера для точного скриншота
             container_box = main_container.bounding_box()
             
             if container_box:
-                # Получаем размеры страницы
-                page_width = page.evaluate("document.documentElement.scrollWidth")
-                page_height = page.evaluate("document.documentElement.scrollHeight")
+                # Определяем оптимальную область для географии
+                viewport_width = page.evaluate("window.innerWidth")
+                viewport_height = page.evaluate("window.innerHeight")
                 
-                # Создаем расширенную область для географии
-                start_x = max(0, container_box["x"] - 50)
-                start_y = max(0, container_box["y"] - 50)
-                content_width = min(container_box["width"] + 100, page_width - start_x)
-                content_height = min(container_box["height"] + 100, page_height - start_y)
+                # Минимальные отступы для захвата всего контента
+                start_x = max(0, container_box["x"] - 10)
+                start_y = max(0, container_box["y"] - 10)
+                content_width = min(container_box["width"] + 20, viewport_width - start_x)
+                content_height = min(container_box["height"] + 20, viewport_height - start_y)
                 
                 content_area = {
                     "x": int(start_x),
@@ -345,33 +354,30 @@ def _shot_geo_section(page, path, geo_zoom=0.8):
                 
                 logging.info(f"📐 Область скриншота географии: x={content_area['x']}, y={content_area['y']}, w={content_area['width']}, h={content_area['height']}")
                 
-                # Принудительная перерисовка для обновления карт
-                page.evaluate("window.dispatchEvent(new Event('resize'))")
-                page.wait_for_timeout(500)
-                
                 page.screenshot(path=path, clip=content_area)
-                logging.info(f"✅ Скриншот географии с масштабом {geo_zoom}: {path}")
+                logging.info(f"✅ Скриншот географии: {path}")
                 return
             else:
                 # Fallback: скриншот контейнера
                 main_container.screenshot(path=path)
-                logging.info(f"✅ Скриншот контейнера географии с масштабом {geo_zoom}: {path}")
+                logging.info(f"✅ Скриншот контейнера географии: {path}")
                 return
         
-        # Если контейнер не найден, делаем полный скриншот
-        logging.warning("⚠️  Контейнер географии не найден, делаем полный скриншот")
-        page.screenshot(path=path, full_page=True)
-        logging.info(f"✅ Полный скриншот географии с масштабом {geo_zoom}: {path}")
+        # Если контейнер не найден, делаем скриншот страницы
+        logging.warning("⚠️  Контейнер географии не найден, делаем скриншот страницы")
+        page.screenshot(path=path)
+        logging.info(f"✅ Скриншот страницы географии: {path}")
         
     except Exception as e:
-        print(f"⚠️  Ошибка при создании скриншота географии: {e}")
-        page.screenshot(path=path, full_page=True)
+        logging.error(f"⚠️  Ошибка при создании скриншота географии: {e}")
+        page.screenshot(path=path)
     finally:
-        # Восстанавливаем оригинальный масштаб
-        try:
-            page.evaluate(f"document.body.style.zoom = '{original_zoom if original_zoom else 'initial'}'")
-        except:
-            pass
+        # Восстанавливаем оригинальный масштаб если он был изменен
+        if original_zoom is not None:
+            try:
+                page.evaluate(f"document.body.style.zoom = '{original_zoom if original_zoom else 'initial'}'")
+            except:
+                pass
 
 
 # ────────────────────────────── main routine ────────────────────────────────
@@ -591,13 +597,30 @@ def screenshot_group_stats(
             if tab == "overview":
                 # Воронка конверсий
                 caption = page.locator("text=Воронка конверсий").first
-                funnel = page.locator("div[class^='ConversionsChart_wrap']").first
-                if caption.count() and funnel.count():
+                funnel_selectors = [
+                    "div[class*='ConversionsChart'][class*='wrap']",
+                    "div[class^='ConversionsChart_wrap']",
+                    "div[class^='ConversionsChart.module_wrap']",
+                    "div.ConversionsChart\\.module_wrap__XzgxY"
+                ]
+                
+                funnel = None
+                for selector in funnel_selectors:
+                    funnel = page.locator(selector).first
+                    if funnel.count() > 0:
+                        logging.info(f"✅ Найден контейнер воронки: {selector}")
+                        break
+                
+                if caption.count() and funnel and funnel.count():
                     funnel_path = os.path.join(
                         output_dir, f"{group_name_upper}_overview_funnel.png"
                     )
                     _shot_with_caption(page, caption, funnel, funnel_path)
                     logging.info(f"✅ Воронка сохранена: {funnel_path}")
+                else:
+                    logging.warning(f"⚠️  Воронка конверсий не найдена для группы {group_name_upper}")
+                    logging.warning(f"   Caption found: {caption.count() > 0}")
+                    logging.warning(f"   Funnel found: {funnel.count() > 0 if funnel else False}")
             elif tab == "demography":
                 # Специальный скриншот для демографии: от названия компании до статистики
                 tab_path = os.path.join(output_dir, f"{group_name_upper}_{tab}.png")
