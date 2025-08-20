@@ -70,7 +70,7 @@ def _shot_with_topline(page, target, path):
             target.screenshot(path=path)
             return
         target.scroll_into_view_if_needed()
-        page.wait_for_timeout(250)
+        page.wait_for_timeout(500)  # Увеличено в 2 раза
         bt, bb = top.bounding_box(), target.bounding_box()
         if bt is None or bb is None:
             target.screenshot(path=path)
@@ -85,7 +85,7 @@ def _shot_with_caption(page, caption, target, path):
     try:
         caption.scroll_into_view_if_needed()
         target.scroll_into_view_if_needed()
-        page.wait_for_timeout(200)
+        page.wait_for_timeout(400)  # Увеличено в 2 раза
         bc, bt = caption.bounding_box(), target.bounding_box()
         if bc is None or bt is None:
             target.screenshot(path=path)
@@ -110,10 +110,10 @@ def _shot_demography_section(page, path, demography_zoom=1.0):
         if demography_zoom != 1.0:
             original_zoom = page.evaluate("document.body.style.zoom")
             page.evaluate(f"document.body.style.zoom = '{demography_zoom}'")
-            page.wait_for_timeout(500)  # Уменьшено время ожидания
+            page.wait_for_timeout(1000)  # Увеличено в 2 раза
         # Прокручиваем в самый верх страницы
         page.evaluate("window.scrollTo(0, 0)")
-        page.wait_for_timeout(300)
+        page.wait_for_timeout(600)  # Увеличено в 2 раза
         
         # Ищем основной контейнер демографии - более точные селекторы
         main_container_selectors = [
@@ -133,7 +133,7 @@ def _shot_demography_section(page, path, demography_zoom=1.0):
         
         if main_container:
             # Ждем загрузки контента
-            page.wait_for_timeout(1000)
+            page.wait_for_timeout(2000)  # Увеличено в 2 раза
             
             # Находим заголовок с названием кампании 
             title_selectors = [
@@ -171,7 +171,7 @@ def _shot_demography_section(page, path, demography_zoom=1.0):
             if title_element and title_element.count() and bottom_element:
                 # Прокручиваем к заголовку 
                 title_element.scroll_into_view_if_needed()
-                page.wait_for_timeout(300)
+                page.wait_for_timeout(600)  # Увеличено в 2 раза
                 
                 # Получаем координаты
                 title_box = title_element.bounding_box()
@@ -212,7 +212,7 @@ def _shot_demography_section(page, path, demography_zoom=1.0):
         logging.warning("⚠️  Не удалось найти точные элементы, делаем скриншот основного контейнера")
         if main_container:
             main_container.scroll_into_view_if_needed()
-            page.wait_for_timeout(300)
+            page.wait_for_timeout(600)  # Увеличено в 2 раза
             main_container.screenshot(path=path)
             logging.info(f"✅ Скриншот контейнера демографии: {path}")
         else:
@@ -246,16 +246,16 @@ def _shot_geo_section(page, path, geo_zoom=1.0):
         if geo_zoom != 1.0:
             original_zoom = page.evaluate("document.body.style.zoom")
             page.evaluate(f"document.body.style.zoom = '{geo_zoom}'")
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(1000)  # Увеличено в 2 раза
         
         # Прокручиваем в самый верх страницы
         page.evaluate("window.scrollTo(0, 0)")
-        page.wait_for_timeout(300)
+        page.wait_for_timeout(600)  # Увеличено в 2 раза
         
         # Ждем завершения сетевых запросов (карты часто загружаются через API)
         try:
             logging.info("⏳ Ожидание сетевых запросов...")
-            page.wait_for_load_state("networkidle", timeout=3000)
+            page.wait_for_load_state("networkidle", timeout=6000)  # Увеличено в 2 раза
             logging.info("✅ Сетевые запросы завершены")
         except Exception:
             logging.warning("⚠️  Timeout сетевых запросов, продолжаем...")
@@ -279,7 +279,7 @@ def _shot_geo_section(page, path, geo_zoom=1.0):
         if main_container:
             # Прокручиваем к контейнеру
             main_container.scroll_into_view_if_needed()
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(1000)  # Увеличено в 2 раза
             
             # Ждем загрузки карты - ищем элементы карты
             logging.info("⏳ Ожидание загрузки карты...")
@@ -293,7 +293,7 @@ def _shot_geo_section(page, path, geo_zoom=1.0):
             
             # Ждем появления карты
             map_loaded = False
-            for attempt in range(8):  # Уменьшено до 8 попыток (8 секунд)
+            for attempt in range(16):  # Увеличено в 2 раза (было 8)
                 for selector in map_selectors:
                     map_elements = page.locator(selector)
                     if map_elements.count() > 0:
@@ -304,14 +304,14 @@ def _shot_geo_section(page, path, geo_zoom=1.0):
                 if map_loaded:
                     break
                     
-                logging.info(f"⏳ Попытка {attempt + 1}/8 - ждем карту...")
-                page.wait_for_timeout(1000)
+                logging.info(f"⏳ Попытка {attempt + 1}/16 - ждем карту...")
+                page.wait_for_timeout(2000)  # Увеличено в 2 раза
             
             if not map_loaded:
                 logging.warning("⚠️  Карта не найдена, но продолжаем...")
             
             # Дополнительное ожидание для полной загрузки карты
-            page.wait_for_timeout(1500)
+            page.wait_for_timeout(3000)  # Увеличено в 2 раза
             
             # Принудительное обновление карт через JavaScript
             try:
@@ -325,7 +325,7 @@ def _shot_geo_section(page, path, geo_zoom=1.0):
                     // Trigger resize event
                     window.dispatchEvent(new Event('resize'));
                 """)
-                page.wait_for_timeout(1000)
+                page.wait_for_timeout(2000)  # Увеличено в 2 раза
             except Exception:
                 pass
             
@@ -428,7 +428,7 @@ def screenshot_group_stats(
         
         # Устанавливаем масштаб страницы для лучшего отображения графиков
         page.evaluate(f"document.body.style.zoom = '{zoom_level}'")
-        page.wait_for_timeout(3_000)
+        page.wait_for_timeout(6_000)  # Увеличено в 2 раза
 
         # Captcha -----------------------------------------------------------
         if _is_captcha(page):
@@ -462,20 +462,20 @@ def screenshot_group_stats(
 
             try:
                 inp.click()
-                page.wait_for_timeout(500)
+                page.wait_for_timeout(1000)  # Увеличено в 2 раза
                 inp.fill("")
-                page.wait_for_timeout(300)
+                page.wait_for_timeout(600)  # Увеличено в 2 раза
                 inp.fill(q)
-                page.wait_for_timeout(500)
+                page.wait_for_timeout(1000)  # Увеличено в 2 раза
                 page.keyboard.press("Enter")
-                page.wait_for_timeout(2_000)
+                page.wait_for_timeout(4_000)  # Увеличено в 2 раза
 
                 contains = page.locator(
                     "[data-testid='search-contains-menu-item']"
                 ).first
                 if contains.count():
                     contains.click()
-                    page.wait_for_timeout(1_000)
+                    page.wait_for_timeout(2_000)  # Увеличено в 2 раза
                     logging.info("✅ Выбран вариант 'содержит'")
 
                 return True
@@ -486,7 +486,7 @@ def screenshot_group_stats(
         # Приводим название группы к верхнему регистру для поиска
         group_name_upper = group_name.upper()
         _apply_search(group_name_upper)
-        page.wait_for_timeout(2_000)
+        page.wait_for_timeout(4_000)  # Увеличено в 2 раза
 
         # Поиск рекламного плана ----------------------------------------
         logging.info(f"🔍 Ищем рекламный план '{group_name_upper}' в таблице...")
@@ -517,15 +517,15 @@ def screenshot_group_stats(
             row = link.locator("..").locator("..").first
 
         try:
-            row.scroll_into_view_if_needed(timeout=10_000)
-            page.wait_for_timeout(400)
+            row.scroll_into_view_if_needed(timeout=20_000)  # Увеличено в 2 раза
+            page.wait_for_timeout(800)  # Увеличено в 2 раза
         except Exception as e:
             logging.warning(f"⚠️  Ошибка при прокрутке к строке: {e}")
 
         # ─── Новое: ховерим строку, чтобы появились иконки действий ────
         try:
-            row.hover(timeout=5_000)
-            page.wait_for_timeout(300)
+            row.hover(timeout=10_000)  # Увеличено в 2 раза
+            page.wait_for_timeout(600)  # Увеличено в 2 раза
             logging.info("🖱️  Навели курсор на строку плана — иконки должны появиться")
         except Exception as e:
             logging.warning(f"⚠️  Не удалось навести курсор на строку: {e}")
@@ -568,7 +568,7 @@ def screenshot_group_stats(
 
         try:
             btn.click()
-            page.wait_for_timeout(4_000)
+            page.wait_for_timeout(8_000)  # Увеличено в 2 раза
             logging.info("✅ Статистика открыта")
         except Exception as e:
             raise RuntimeError(f"⚠️  Ошибка при клике на статистику: {e}") from e
@@ -586,9 +586,9 @@ def screenshot_group_stats(
                 if tab == "geo":
                     # Дополнительное ожидание для географии (карты загружаются дольше)
                     logging.info("⏳ Дополнительное ожидание для загрузки карт...")
-                    page.wait_for_timeout(3_000)
+                    page.wait_for_timeout(6_000)  # Увеличено в 2 раза
                 else:
-                    page.wait_for_timeout(1_000)
+                    page.wait_for_timeout(2_000)  # Увеличено в 2 раза
                 logging.info(f"✅ Вкладка {tab} открыта")
             else:
                 logging.warning(f"⚠️  Вкладка '{tab}' не найдена – пропускаем")
