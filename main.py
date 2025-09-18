@@ -38,7 +38,7 @@ def main() -> None:
         "https://ads.vk.com/hq/dashboard/ad_groups"
         "?sudo=vkads_3012708486%40mailru"
         "&mode=ads&attribution=conversion"
-        "&date_from=01.06.2025&date_to=18.08.2025"
+        "&date_from=01.08.2025&date_to=31.08.2025"
         "&sort=-created"
     )
 

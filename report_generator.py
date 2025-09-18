@@ -20,7 +20,7 @@ def generate_report(posts: list[dict],
         doc.add_heading(company, level=1)
 
         for idx, post in enumerate(items, start=1):
-            subtitle = f"{idx}. {post['Группа']}"
+            subtitle = post['Группа']
             doc.add_heading(subtitle, level=2)
             doc.add_paragraph(post["Ссылка"])
 
