@@ -1,0 +1,32 @@
+version: '3'
+
+services:
+  vk-bot-1:
+    build:
+      context: ./vk1
+    volumes:
+      - ./vk1/assets:/app/assets
+      - ./vk1/log:/app/log
+      - ./vk1/Отчет.docx:/app/Отчет.docx
+    environment:
+      - INSTANCE_NAME=vk1
+
+  vk-bot-2:
+    build:
+      context: ./vk2
+    volumes:
+      - ./vk2/assets:/app/assets
+      - ./vk2/log:/app/log
+      - ./vk2/Отчет.docx:/app/Отчет.docx
+    environment:
+      - INSTANCE_NAME=vk2
+
+  vk-bot-3:
+    build:
+      context: ./vk3
+    volumes:
+      - ./vk3/assets:/app/assets
+      - ./vk3/log:/app/log
+      - ./vk3/Отчет.docx:/app/Отчет.docx
+    environment:
+      - INSTANCE_NAME=vk3
