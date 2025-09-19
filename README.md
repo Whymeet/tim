@@ -5,7 +5,8 @@ This project creates screenshots of VK posts and statistics of the related adver
 ## Requirements
 
 - Python 3.8+
-- Google Chrome/Chromium browsers used by [Playwright](https://playwright.dev/)
+- Google Chrome installed (Playwright launches the desktop browser via the `chrome` channel).
+  The scripts reuse the local profile stored in `.playwright-profile` to keep the browser looking human and reduce captcha prompts.
 
 Install Python dependencies:
 

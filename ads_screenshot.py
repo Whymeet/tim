@@ -1,5 +1,6 @@
 # ads_screenshot.py
 from playwright.sync_api import sync_playwright
+from vk_ads_context import create_vk_ads_context
 import os
 import time
 import logging
@@ -413,231 +414,234 @@ def screenshot_group_stats(
     logging.info(f"📁 Папка {output_dir} создана/проверена")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
-        ctx = browser.new_context(
-            storage_state="vk_storage.json", viewport={"width": viewport_width, "height": viewport_height}
+        ctx = create_vk_ads_context(
+            p,
+            storage_state="vk_storage.json",
+            viewport={"width": viewport_width, "height": viewport_height},
         )
-        page = ctx.new_page()
-
-        print(f"➡️  Opening VK Ads: {ads_url}")
-        page.goto(ads_url, timeout=60_000)
         try:
-            page.wait_for_load_state("networkidle", timeout=10_000)
-        except Exception:
-            logging.warning("⚠️  networkidle wasn't reached – continuing …")
-        
-        # Устанавливаем масштаб страницы для лучшего отображения графиков
-        page.evaluate(f"document.body.style.zoom = '{zoom_level}'")
-        page.wait_for_timeout(6_000)  # Увеличено в 2 раза
-
-        # Captcha -----------------------------------------------------------
-        if _is_captcha(page):
-            logging.warning("🛑 Captcha detected – solve it …")
-            page.wait_for_timeout(30_000)
-            ctx.storage_state(path="vk_storage.json")
-
-        # Search ------------------------------------------------------------
-        def _apply_search(q: str):
-            logging.info(f"🔍 Поиск рекламного плана: '{q}'")
-
-            search_selectors = [
-                "input[type='search']",
-                "input[placeholder*='Поиск']",
-                "input[placeholder*='поиск']",
-                "[data-testid*='search'] input",
-                ".search input",
-                "input[name*='search']",
-            ]
-
-            inp = None
-            for selector in search_selectors:
-                inp = page.locator(selector).first
-                if inp.count() > 0:
-                    logging.info(f"✅ Найдено поле поиска: {selector}")
-                    break
-
-            if not inp or inp.count() == 0:
-                logging.error("❌ Поле поиска не найдено, попробуем продолжить без поиска")
-                return False
-
+            page = ctx.new_page()
+    
+            print(f"➡️  Opening VK Ads: {ads_url}")
+            page.goto(ads_url, timeout=60_000)
             try:
-                inp.click()
-                page.wait_for_timeout(1000)  # Увеличено в 2 раза
-                inp.fill("")
-                page.wait_for_timeout(600)  # Увеличено в 2 раза
-                inp.fill(q)
-                page.wait_for_timeout(1000)  # Увеличено в 2 раза
-                page.keyboard.press("Enter")
-                page.wait_for_timeout(4_000)  # Увеличено в 2 раза
-
-                contains = page.locator(
-                    "[data-testid='search-contains-menu-item']"
-                ).first
-                if contains.count():
-                    contains.click()
-                    page.wait_for_timeout(2_000)  # Увеличено в 2 раза
-                    logging.info("✅ Выбран вариант 'содержит'")
-
-                return True
-            except Exception as e:
-                logging.error(f"⚠️  Ошибка при поиске: {e}")
-                return False
-
-        # Приводим название группы к верхнему регистру для поиска
-        group_name_upper = group_name.upper()
-        _apply_search(group_name_upper)
-        page.wait_for_timeout(4_000)  # Увеличено в 2 раза
-
-        # Поиск рекламного плана ----------------------------------------
-        logging.info(f"🔍 Ищем рекламный план '{group_name_upper}' в таблице...")
-
-        link_selectors = [
-            f"[data-testid='name-link']:has-text('{group_name_upper}')",
-            f"a:has-text('{group_name_upper}')",
-            f"[data-testid='name-link']",
-            f"td a:has-text('{group_name_upper}')",
-            f"tr:has-text('{group_name_upper}') [data-testid='name-link']",
-        ]
-
-        link = None
-        for selector in link_selectors:
-            link = page.locator(selector).first
-            if link.count() > 0 and group_name_upper in (link.text_content() or "").upper():
-                logging.info(f"✅ Найден план: {link.text_content().strip()}")
-                break
-
-        if not link or link.count() == 0:
-            raise RuntimeError(
-                f"❌ Рекламный план '{group_name_upper}' не найден! Проверьте название."
-            )
-
-        # Находим родительскую строку таблицы
-        row = link.locator("xpath=ancestor::tr").first
-        if row.count() == 0:
-            row = link.locator("..").locator("..").first
-
-        try:
-            row.scroll_into_view_if_needed(timeout=20_000)  # Увеличено в 2 раза
-            page.wait_for_timeout(800)  # Увеличено в 2 раза
-        except Exception as e:
-            logging.warning(f"⚠️  Ошибка при прокрутке к строке: {e}")
-
-        # ─── Новое: ховерим строку, чтобы появились иконки действий ────
-        try:
-            row.hover(timeout=10_000)  # Увеличено в 2 раза
-            page.wait_for_timeout(600)  # Увеличено в 2 раза
-            logging.info("🖱️  Навели курсор на строку плана — иконки должны появиться")
-        except Exception as e:
-            logging.warning(f"⚠️  Не удалось навести курсор на строку: {e}")
-
-        # Поиск кнопки статистики --------------------------------------
-        logging.info("📊 Открываем статистику...")
-
-        stats_selectors = [
-            "a[data-testid='stats']",
-            "[data-testid='stats']",
-            "button[title*='Статистика']",
-            "a[title*='Статистика']",
-            "svg.vkuiIcon--poll_outline_20",
-            "svg[class*='poll_outline']",
-            "svg[aria-label*='Статистика']",
-            "button:has(svg[class*='poll_outline'])",
-        ]
-
-        def _find_stats_button(scope):
-            for sel in stats_selectors:
-                btn = scope.locator(sel).first
-                if btn.count() > 0:
-                    logging.info(f"✅ Найдена кнопка статистики: {sel}")
-                    return btn
-            return None
-
-        btn = _find_stats_button(row) or _find_stats_button(page)
-        if not btn:
-            # Быстрая диагностика: покажем, какие svg-иконки есть в строке
-            svgs = row.locator("svg").all()
-            logging.warning(f"❔ В строке найдено SVG-иконок: {len(svgs)}")
-            for i, svg in enumerate(svgs[:5], 1):
-                try:
-                    logging.info(f"  {i}. {svg.get_attribute('class')}")
-                except Exception:
-                    pass
-            raise RuntimeError(
-                "❌ Кнопка статистики не найдена – возможно, изменился интерфейс"
-            )
-
-        try:
-            btn.click()
-            page.wait_for_timeout(8_000)  # Увеличено в 2 раза
-            logging.info("✅ Статистика открыта")
-        except Exception as e:
-            raise RuntimeError(f"⚠️  Ошибка при клике на статистику: {e}") from e
-
-        # Убеждаемся, что папка всё ещё существует
-        _safe_mkdir(output_dir)
-
-        # Iterate tabs --------------------------------------------------
-        for tab in tabs or ("overview",):
-            logging.info(f"📑 Обрабатываем вкладку: {tab}")
-
-            tab_btn = page.locator(f"#tab_{tab}")
-            if tab_btn.count():
-                tab_btn.click()
-                if tab == "geo":
-                    # Дополнительное ожидание для географии (карты загружаются дольше)
-                    logging.info("⏳ Дополнительное ожидание для загрузки карт...")
-                    page.wait_for_timeout(6_000)  # Увеличено в 2 раза
-                else:
-                    page.wait_for_timeout(2_000)  # Увеличено в 2 раза
-                logging.info(f"✅ Вкладка {tab} открыта")
-            else:
-                logging.warning(f"⚠️  Вкладка '{tab}' не найдена – пропускаем")
-                continue
-
-            if tab == "overview":
-                # Воронка конверсий
-                caption = page.locator("text=Воронка конверсий").first
-                funnel_selectors = [
-                    "div[class*='ConversionsChart'][class*='wrap']",
-                    "div[class^='ConversionsChart_wrap']",
-                    "div[class^='ConversionsChart.module_wrap']",
-                    "div.ConversionsChart\\.module_wrap__XzgxY"
+                page.wait_for_load_state("networkidle", timeout=10_000)
+            except Exception:
+                logging.warning("⚠️  networkidle wasn't reached – continuing …")
+            
+            # Устанавливаем масштаб страницы для лучшего отображения графиков
+            page.evaluate(f"document.body.style.zoom = '{zoom_level}'")
+            page.wait_for_timeout(6_000)  # Увеличено в 2 раза
+    
+            # Captcha -----------------------------------------------------------
+            if _is_captcha(page):
+                logging.warning("🛑 Captcha detected – solve it …")
+                page.wait_for_timeout(30_000)
+                ctx.storage_state(path="vk_storage.json")
+    
+            # Search ------------------------------------------------------------
+            def _apply_search(q: str):
+                logging.info(f"🔍 Поиск рекламного плана: '{q}'")
+    
+                search_selectors = [
+                    "input[type='search']",
+                    "input[placeholder*='Поиск']",
+                    "input[placeholder*='поиск']",
+                    "[data-testid*='search'] input",
+                    ".search input",
+                    "input[name*='search']",
                 ]
-                
-                funnel = None
-                for selector in funnel_selectors:
-                    funnel = page.locator(selector).first
-                    if funnel.count() > 0:
-                        logging.info(f"✅ Найден контейнер воронки: {selector}")
+    
+                inp = None
+                for selector in search_selectors:
+                    inp = page.locator(selector).first
+                    if inp.count() > 0:
+                        logging.info(f"✅ Найдено поле поиска: {selector}")
                         break
-                
-                if caption.count() and funnel and funnel.count():
-                    funnel_path = os.path.join(
-                        output_dir, f"{group_name_upper}_overview_funnel.png"
-                    )
-                    _shot_with_caption(page, caption, funnel, funnel_path)
-                    logging.info(f"✅ Воронка сохранена: {funnel_path}")
+    
+                if not inp or inp.count() == 0:
+                    logging.error("❌ Поле поиска не найдено, попробуем продолжить без поиска")
+                    return False
+    
+                try:
+                    inp.click()
+                    page.wait_for_timeout(1000)  # Увеличено в 2 раза
+                    inp.fill("")
+                    page.wait_for_timeout(600)  # Увеличено в 2 раза
+                    inp.fill(q)
+                    page.wait_for_timeout(1000)  # Увеличено в 2 раза
+                    page.keyboard.press("Enter")
+                    page.wait_for_timeout(4_000)  # Увеличено в 2 раза
+    
+                    contains = page.locator(
+                        "[data-testid='search-contains-menu-item']"
+                    ).first
+                    if contains.count():
+                        contains.click()
+                        page.wait_for_timeout(2_000)  # Увеличено в 2 раза
+                        logging.info("✅ Выбран вариант 'содержит'")
+    
+                    return True
+                except Exception as e:
+                    logging.error(f"⚠️  Ошибка при поиске: {e}")
+                    return False
+    
+            # Приводим название группы к верхнему регистру для поиска
+            group_name_upper = group_name.upper()
+            _apply_search(group_name_upper)
+            page.wait_for_timeout(4_000)  # Увеличено в 2 раза
+    
+            # Поиск рекламного плана ----------------------------------------
+            logging.info(f"🔍 Ищем рекламный план '{group_name_upper}' в таблице...")
+    
+            link_selectors = [
+                f"[data-testid='name-link']:has-text('{group_name_upper}')",
+                f"a:has-text('{group_name_upper}')",
+                f"[data-testid='name-link']",
+                f"td a:has-text('{group_name_upper}')",
+                f"tr:has-text('{group_name_upper}') [data-testid='name-link']",
+            ]
+    
+            link = None
+            for selector in link_selectors:
+                link = page.locator(selector).first
+                if link.count() > 0 and group_name_upper in (link.text_content() or "").upper():
+                    logging.info(f"✅ Найден план: {link.text_content().strip()}")
+                    break
+    
+            if not link or link.count() == 0:
+                raise RuntimeError(
+                    f"❌ Рекламный план '{group_name_upper}' не найден! Проверьте название."
+                )
+    
+            # Находим родительскую строку таблицы
+            row = link.locator("xpath=ancestor::tr").first
+            if row.count() == 0:
+                row = link.locator("..").locator("..").first
+    
+            try:
+                row.scroll_into_view_if_needed(timeout=20_000)  # Увеличено в 2 раза
+                page.wait_for_timeout(800)  # Увеличено в 2 раза
+            except Exception as e:
+                logging.warning(f"⚠️  Ошибка при прокрутке к строке: {e}")
+    
+            # ─── Новое: ховерим строку, чтобы появились иконки действий ────
+            try:
+                row.hover(timeout=10_000)  # Увеличено в 2 раза
+                page.wait_for_timeout(600)  # Увеличено в 2 раза
+                logging.info("🖱️  Навели курсор на строку плана — иконки должны появиться")
+            except Exception as e:
+                logging.warning(f"⚠️  Не удалось навести курсор на строку: {e}")
+    
+            # Поиск кнопки статистики --------------------------------------
+            logging.info("📊 Открываем статистику...")
+    
+            stats_selectors = [
+                "a[data-testid='stats']",
+                "[data-testid='stats']",
+                "button[title*='Статистика']",
+                "a[title*='Статистика']",
+                "svg.vkuiIcon--poll_outline_20",
+                "svg[class*='poll_outline']",
+                "svg[aria-label*='Статистика']",
+                "button:has(svg[class*='poll_outline'])",
+            ]
+    
+            def _find_stats_button(scope):
+                for sel in stats_selectors:
+                    btn = scope.locator(sel).first
+                    if btn.count() > 0:
+                        logging.info(f"✅ Найдена кнопка статистики: {sel}")
+                        return btn
+                return None
+    
+            btn = _find_stats_button(row) or _find_stats_button(page)
+            if not btn:
+                # Быстрая диагностика: покажем, какие svg-иконки есть в строке
+                svgs = row.locator("svg").all()
+                logging.warning(f"❔ В строке найдено SVG-иконок: {len(svgs)}")
+                for i, svg in enumerate(svgs[:5], 1):
+                    try:
+                        logging.info(f"  {i}. {svg.get_attribute('class')}")
+                    except Exception:
+                        pass
+                raise RuntimeError(
+                    "❌ Кнопка статистики не найдена – возможно, изменился интерфейс"
+                )
+    
+            try:
+                btn.click()
+                page.wait_for_timeout(8_000)  # Увеличено в 2 раза
+                logging.info("✅ Статистика открыта")
+            except Exception as e:
+                raise RuntimeError(f"⚠️  Ошибка при клике на статистику: {e}") from e
+    
+            # Убеждаемся, что папка всё ещё существует
+            _safe_mkdir(output_dir)
+    
+            # Iterate tabs --------------------------------------------------
+            for tab in tabs or ("overview",):
+                logging.info(f"📑 Обрабатываем вкладку: {tab}")
+    
+                tab_btn = page.locator(f"#tab_{tab}")
+                if tab_btn.count():
+                    tab_btn.click()
+                    if tab == "geo":
+                        # Дополнительное ожидание для географии (карты загружаются дольше)
+                        logging.info("⏳ Дополнительное ожидание для загрузки карт...")
+                        page.wait_for_timeout(6_000)  # Увеличено в 2 раза
+                    else:
+                        page.wait_for_timeout(2_000)  # Увеличено в 2 раза
+                    logging.info(f"✅ Вкладка {tab} открыта")
                 else:
-                    logging.warning(f"⚠️  Воронка конверсий не найдена для группы {group_name_upper}")
-                    logging.warning(f"   Caption found: {caption.count() > 0}")
-                    logging.warning(f"   Funnel found: {funnel.count() > 0 if funnel else False}")
-            elif tab == "demography":
-                # Специальный скриншот для демографии: от названия компании до статистики
-                tab_path = os.path.join(output_dir, f"{group_name_upper}_{tab}.png")
-                _safe_mkdir(output_dir)
-                _shot_demography_section(page, tab_path, demography_zoom)
-            elif tab == "geo":
-                # Специальный скриншот для географии с настраиваемым масштабом
-                tab_path = os.path.join(output_dir, f"{group_name_upper}_{tab}.png")
-                _safe_mkdir(output_dir)
-                _shot_geo_section(page, tab_path, geo_zoom)
-            elif tab != "overview":
-                # Полный скриншот вкладки (только для остальных вкладок)
-                _scroll_to_bottom(page)
-                tab_path = os.path.join(output_dir, f"{group_name_upper}_{tab}.png")
-                _safe_mkdir(output_dir)
-                page.screenshot(path=tab_path, full_page=True)
-                logging.info(f"✅ Скриншот вкладки сохранён: {tab_path}")
-
-        logging.info("✅ Все скриншоты VK Ads созданы успешно")
-        browser.close()
+                    logging.warning(f"⚠️  Вкладка '{tab}' не найдена – пропускаем")
+                    continue
+    
+                if tab == "overview":
+                    # Воронка конверсий
+                    caption = page.locator("text=Воронка конверсий").first
+                    funnel_selectors = [
+                        "div[class*='ConversionsChart'][class*='wrap']",
+                        "div[class^='ConversionsChart_wrap']",
+                        "div[class^='ConversionsChart.module_wrap']",
+                        "div.ConversionsChart\\.module_wrap__XzgxY"
+                    ]
+                    
+                    funnel = None
+                    for selector in funnel_selectors:
+                        funnel = page.locator(selector).first
+                        if funnel.count() > 0:
+                            logging.info(f"✅ Найден контейнер воронки: {selector}")
+                            break
+                    
+                    if caption.count() and funnel and funnel.count():
+                        funnel_path = os.path.join(
+                            output_dir, f"{group_name_upper}_overview_funnel.png"
+                        )
+                        _shot_with_caption(page, caption, funnel, funnel_path)
+                        logging.info(f"✅ Воронка сохранена: {funnel_path}")
+                    else:
+                        logging.warning(f"⚠️  Воронка конверсий не найдена для группы {group_name_upper}")
+                        logging.warning(f"   Caption found: {caption.count() > 0}")
+                        logging.warning(f"   Funnel found: {funnel.count() > 0 if funnel else False}")
+                elif tab == "demography":
+                    # Специальный скриншот для демографии: от названия компании до статистики
+                    tab_path = os.path.join(output_dir, f"{group_name_upper}_{tab}.png")
+                    _safe_mkdir(output_dir)
+                    _shot_demography_section(page, tab_path, demography_zoom)
+                elif tab == "geo":
+                    # Специальный скриншот для географии с настраиваемым масштабом
+                    tab_path = os.path.join(output_dir, f"{group_name_upper}_{tab}.png")
+                    _safe_mkdir(output_dir)
+                    _shot_geo_section(page, tab_path, geo_zoom)
+                elif tab != "overview":
+                    # Полный скриншот вкладки (только для остальных вкладок)
+                    _scroll_to_bottom(page)
+                    tab_path = os.path.join(output_dir, f"{group_name_upper}_{tab}.png")
+                    _safe_mkdir(output_dir)
+                    page.screenshot(path=tab_path, full_page=True)
+                    logging.info(f"✅ Скриншот вкладки сохранён: {tab_path}")
+    
+            logging.info("✅ Все скриншоты VK Ads созданы успешно")
+        finally:
+            ctx.close()
