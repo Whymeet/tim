@@ -1,6 +1,6 @@
 from post_loader import load_posts
 from vk_screenshot import batch_screenshots
-from ads_screenshot import screenshot_group_stats
+from ads_screenshot import screenshot_multiple_groups_stats
 from report_generator import generate_report
 import os
 import logging
@@ -77,32 +77,30 @@ def main() -> None:
     batch_screenshots(valid_posts, output_dir)
     logger.info("✅ Скрины постов готовы")
 
-    done_groups: set[str] = set()
-    successful_groups: set[str] = set()  # Отслеживаем успешно обработанные группы
+    # Собираем уникальные названия групп для оптимизированной обработки
+    unique_groups = []
+    seen_groups = set()
     
-    for idx, post in enumerate(valid_posts, 1):
+    for post in valid_posts:
         group_name = post.get("Группа", "").upper()
-        if group_name in done_groups:
-            continue
+        if group_name not in seen_groups:
+            unique_groups.append(group_name)
+            seen_groups.add(group_name)
 
-        logger.info(f"📊 [{idx}/{len(valid_posts)}] VK Ads для группы '{group_name}'…")
-        try:
-            screenshot_group_stats(
-                group_name, 
-                output_dir, 
-                ads_url,
-                demography_zoom=1.0,  # Без масштабирования для демографии
-                geo_zoom=1.0,         # Без масштабирования для географии
-                viewport_width=1920,
-                viewport_height=1200
-            )
-            done_groups.add(group_name)
-            successful_groups.add(group_name)  # Добавляем в успешные
-            logger.info(f"   ✅ Готово - группа {group_name} добавлена в отчет")
-        except Exception as e:
-            logger.error(f"   ❌ Не вышло: {e}")
-            logger.warning(f"   🚫 Группа {group_name} НЕ будет включена в отчет")
-            done_groups.add(group_name)  # Помечаем как обработанную, но НЕ как успешную
+    logger.info(f"📊 Обрабатываем {len(unique_groups)} уникальных групп в одном браузере...")
+    
+    # Используем оптимизированную функцию для всех групп сразу
+    successful_groups, failed_groups = screenshot_multiple_groups_stats(
+        groups=unique_groups,
+        output_dir=output_dir,
+        ads_url=ads_url,
+        demography_zoom=1.0,  # Без масштабирования для демографии
+        geo_zoom=1.0,         # Без масштабирования для географии
+        viewport_width=1920,
+        viewport_height=1200
+    )
+    
+    logger.info(f"✅ VK Ads статистика готова. Успешно: {len(successful_groups)}, Ошибки: {len(failed_groups)}")
 
     # Фильтруем посты - оставляем только те, для которых успешно создали скрины статистики
     posts_for_report = []

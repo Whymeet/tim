@@ -107,7 +107,7 @@ def _shot_demography_section(page, path, demography_zoom=1.0):
     try:
         # Сохраняем текущий масштаб только если нужно изменить
         original_zoom = None
-        if demography_zoom != 1.0:
+        if (demography_zoom != 1.0):
             original_zoom = page.evaluate("document.body.style.zoom")
             page.evaluate(f"document.body.style.zoom = '{demography_zoom}'")
             page.wait_for_timeout(1000)  # Увеличено в 2 раза
@@ -177,7 +177,7 @@ def _shot_demography_section(page, path, demography_zoom=1.0):
                 title_box = title_element.bounding_box()
                 bottom_box = bottom_element.bounding_box()
                 
-                if title_box and bottom_box:
+                if (title_box and bottom_box):
                     # Определяем оптимальную область скриншота
                     viewport_width = page.evaluate("window.innerWidth")
                     
@@ -641,3 +641,555 @@ def screenshot_group_stats(
 
         logging.info("✅ Все скриншоты VK Ads созданы успешно")
         browser.close()
+
+
+def screenshot_multiple_groups_stats(
+    groups: list[str],
+    output_dir: str,
+    ads_url: str,
+    tabs: tuple[str, ...] | None = ("overview", "demography", "geo"),
+    viewport_width: int = 1920,
+    viewport_height: int = 1080,
+    zoom_level: float = 0.8,
+    demography_zoom: float = 0.6,
+    geo_zoom: float = 0.8,
+):
+    """Оптимизированная функция для скриншотов нескольких групп в одном браузере.
+    
+    Args:
+        groups: Список названий групп для обработки
+        output_dir: Папка для сохранения скриншотов
+        ads_url: URL страницы VK Ads
+        tabs: Список вкладок для скриншотов
+        viewport_width: Ширина окна браузера
+        viewport_height: Высота окна браузера
+        zoom_level: Уровень масштабирования страницы
+        demography_zoom: Масштаб для демографии
+        geo_zoom: Масштаб для географии
+    """
+    _safe_mkdir(output_dir)
+    logging.info(f"📁 Папка {output_dir} создана/проверена")
+    
+    successful_groups = []
+    failed_groups = []
+    
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=False)
+        ctx = browser.new_context(
+            storage_state="vk_storage.json", 
+            viewport={"width": viewport_width, "height": viewport_height}
+        )
+        page = ctx.new_page()
+        
+        logging.info(f"➡️  Открываем VK Ads: {ads_url}")
+        page.goto(ads_url, timeout=60_000)
+        
+        try:
+            page.wait_for_load_state("networkidle", timeout=10_000)
+        except Exception:
+            logging.warning("⚠️  networkidle не достигнут – продолжаем...")
+        
+        # Устанавливаем масштаб страницы
+        page.evaluate(f"document.body.style.zoom = '{zoom_level}'")
+        page.wait_for_timeout(6_000)
+        
+        # Проверка на капчу
+        if _is_captcha(page):
+            logging.warning("🛑 Обнаружена капча – решите её...")
+            page.wait_for_timeout(30_000)
+            ctx.storage_state(path="vk_storage.json")
+        
+        # Обрабатываем каждую группу
+        for idx, group_name in enumerate(groups, 1):
+            group_name_upper = group_name.upper()
+            logging.info(f"📊 [{idx}/{len(groups)}] Обрабатываем группу: '{group_name_upper}'")
+            
+            try:
+                # Поиск группы
+                if not _apply_search_optimized(page, group_name_upper):
+                    logging.error(f"❌ Не удалось выполнить поиск для группы: {group_name_upper}")
+                    failed_groups.append(group_name_upper)
+                    continue
+                
+                page.wait_for_timeout(4_000)
+                
+                # Открытие статистики
+                if not _open_group_stats(page, group_name_upper):
+                    logging.error(f"❌ Не удалось открыть статистику для группы: {group_name_upper}")
+                    failed_groups.append(group_name_upper)
+                    continue
+                
+                # Создание скриншотов
+                _create_screenshots_for_group(page, group_name_upper, output_dir, tabs, demography_zoom, geo_zoom)
+                
+                # Закрытие статистики
+                _close_group_stats(page)
+                
+                # Очистка поиска (кроме последней группы)
+                if idx < len(groups):
+                    _clear_search(page)
+                
+                successful_groups.append(group_name_upper)
+                logging.info(f"✅ Группа {group_name_upper} обработана успешно")
+                
+            except Exception as e:
+                logging.error(f"❌ Ошибка при обработке группы {group_name_upper}: {e}")
+                failed_groups.append(group_name_upper)
+                
+                # Пытаемся закрыть статистику в случае ошибки
+                try:
+                    _close_group_stats(page)
+                except:
+                    pass
+        
+        browser.close()
+    
+    logging.info(f"🏁 Обработка завершена. Успешно: {len(successful_groups)}, Ошибки: {len(failed_groups)}")
+    if failed_groups:
+        logging.warning(f"⚠️  Группы с ошибками: {', '.join(failed_groups)}")
+    
+    return successful_groups, failed_groups
+
+
+def _apply_search_optimized(page, query: str) -> bool:
+    """Оптимизированный поиск с логированием."""
+    logging.info(f"🔍 Поиск рекламного плана: '{query}'")
+    
+    search_selectors = [
+        "input[type='search']",
+        "input[placeholder*='Поиск']",
+        "input[placeholder*='поиск']",
+        "[data-testid*='search'] input",
+        ".search input",
+        "input[name*='search']",
+    ]
+    
+    inp = None
+    for selector in search_selectors:
+        inp = page.locator(selector).first
+        if inp.count() > 0:
+            logging.info(f"✅ Найдено поле поиска: {selector}")
+            break
+    
+    if not inp or inp.count() == 0:
+        logging.error("❌ Поле поиска не найдено")
+        return False
+    
+    try:
+        inp.click()
+        page.wait_for_timeout(1000)
+        inp.fill("")
+        page.wait_for_timeout(600)
+        inp.fill(query)
+        page.wait_for_timeout(1000)
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(4_000)
+        
+        # Проверяем наличие опции "содержит"
+        contains = page.locator("[data-testid='search-contains-menu-item']").first
+        if contains.count():
+            contains.click()
+            page.wait_for_timeout(2_000)
+            logging.info("✅ Выбран вариант 'содержит'")
+        
+        return True
+        
+    except Exception as e:
+        logging.error(f"⚠️  Ошибка при поиске: {e}")
+        return False
+
+
+def _open_group_stats(page, group_name_upper: str) -> bool:
+    """Открывает статистику для указанной группы."""
+    logging.info(f"🔍 Ищем рекламный план '{group_name_upper}' в таблице...")
+    
+    link_selectors = [
+        f"[data-testid='name-link']:has-text('{group_name_upper}')",
+        f"a:has-text('{group_name_upper}')",
+        f"[data-testid='name-link']",
+        f"td a:has-text('{group_name_upper}')",
+        f"tr:has-text('{group_name_upper}') [data-testid='name-link']",
+    ]
+    
+    link = None
+    for selector in link_selectors:
+        link = page.locator(selector).first
+        if link.count() > 0 and group_name_upper in (link.text_content() or "").upper():
+            logging.info(f"✅ Найден план: {link.text_content().strip()}")
+            break
+    
+    if not link or link.count() == 0:
+        logging.error(f"❌ Рекламный план '{group_name_upper}' не найден!")
+        return False
+    
+    # Находим родительскую строку
+    row = link.locator("xpath=ancestor::tr").first
+    if row.count() == 0:
+        row = link.locator("..").locator("..").first
+    
+    try:
+        row.scroll_into_view_if_needed(timeout=20_000)
+        page.wait_for_timeout(800)
+    except Exception as e:
+        logging.warning(f"⚠️  Ошибка при прокрутке к строке: {e}")
+    
+    # Ховерим строку для появления кнопок
+    try:
+        row.hover(timeout=10_000)
+        page.wait_for_timeout(600)
+        logging.info("🖱️  Навели курсор на строку плана")
+    except Exception as e:
+        logging.warning(f"⚠️  Не удалось навести курсор на строку: {e}")
+    
+    # Поиск кнопки статистики
+    logging.info("📊 Открываем статистику...")
+    stats_selectors = [
+        "a[data-testid='stats']",
+        "[data-testid='stats']",
+        "button[title*='Статистика']",
+        "a[title*='Статистика']",
+        "svg.vkuiIcon--poll_outline_20",
+        "svg[class*='poll_outline']",
+        "svg[aria-label*='Статистика']",
+        "button:has(svg[class*='poll_outline'])",
+    ]
+    
+    def _find_stats_button(scope):
+        for sel in stats_selectors:
+            btn = scope.locator(sel).first
+            if btn.count() > 0:
+                logging.info(f"✅ Найдена кнопка статистики: {sel}")
+                return btn
+        return None
+    
+    btn = _find_stats_button(row) or _find_stats_button(page)
+    if not btn:
+        logging.error("❌ Кнопка статистики не найдена")
+        return False
+    
+    try:
+        btn.click()
+        page.wait_for_timeout(8_000)
+        logging.info("✅ Статистика открыта")
+        return True
+    except Exception as e:
+        logging.error(f"⚠️  Ошибка при клике на статистику: {e}")
+        return False
+
+
+def _create_screenshots_for_group(page, group_name_upper: str, output_dir: str, tabs, demography_zoom: float, geo_zoom: float):
+    """Создает скриншоты для всех вкладок группы."""
+    _safe_mkdir(output_dir)
+    
+    for tab in tabs or ("overview",):
+        logging.info(f"📑 Обрабатываем вкладку: {tab}")
+        
+        tab_btn = page.locator(f"#tab_{tab}")
+        if tab_btn.count():
+            tab_btn.click()
+            if tab == "geo":
+                logging.info("⏳ Дополнительное ожидание для загрузки карт...")
+                page.wait_for_timeout(6_000)
+            else:
+                page.wait_for_timeout(2_000)
+            logging.info(f"✅ Вкладка {tab} открыта")
+        else:
+            logging.warning(f"⚠️  Вкладка '{tab}' не найдена – пропускаем")
+            continue
+        
+        if tab == "overview":
+            # Воронка конверсий
+            caption = page.locator("text=Воронка конверсий").first
+            funnel_selectors = [
+                "div[class*='ConversionsChart'][class*='wrap']",
+                "div[class^='ConversionsChart_wrap']", 
+                "div[class^='ConversionsChart.module_wrap']",
+                "div.ConversionsChart\\.module_wrap__XzgxY"
+            ]
+            
+            funnel = None
+            for selector in funnel_selectors:
+                funnel = page.locator(selector).first
+                if funnel.count() > 0:
+                    logging.info(f"✅ Найден контейнер воронки: {selector}")
+                    break
+            
+            if caption.count() and funnel and funnel.count():
+                funnel_path = os.path.join(output_dir, f"{group_name_upper}_overview_funnel.png")
+                _shot_with_caption(page, caption, funnel, funnel_path)
+                logging.info(f"✅ Воронка сохранена: {funnel_path}")
+            else:
+                logging.warning(f"⚠️  Воронка конверсий не найдена для группы {group_name_upper}")
+                
+        elif tab == "demography":
+            tab_path = os.path.join(output_dir, f"{group_name_upper}_{tab}.png")
+            _safe_mkdir(output_dir)
+            _shot_demography_section(page, tab_path, demography_zoom)
+            
+        elif tab == "geo":
+            tab_path = os.path.join(output_dir, f"{group_name_upper}_{tab}.png")
+            _safe_mkdir(output_dir)
+            _shot_geo_section(page, tab_path, geo_zoom)
+            
+        elif tab != "overview":
+            _scroll_to_bottom(page)
+            tab_path = os.path.join(output_dir, f"{group_name_upper}_{tab}.png")
+            _safe_mkdir(output_dir)
+            page.screenshot(path=tab_path, full_page=True)
+            logging.info(f"✅ Скриншот вкладки сохранён: {tab_path}")
+
+
+def _close_group_stats(page):
+    """Закрывает статистику группы по крестику."""
+    logging.info("🔄 Закрываем статистику...")
+    
+    # Ждем стабилизации страницы
+    page.wait_for_timeout(1000)
+    
+    # Более точные селекторы для кнопки закрытия
+    close_selectors = [
+        # Точный селектор для SVG с cancel_24
+        "svg.vkuiIcon--cancel_24",
+        "svg[class*='vkuiIcon--cancel_24']",
+        "svg[class*='cancel_24']",
+        # Кнопки, содержащие этот SVG
+        "button:has(svg.vkuiIcon--cancel_24)",
+        "button:has(svg[class*='cancel_24'])",
+        "[role='button']:has(svg[class*='cancel_24'])",
+        # Родительские элементы с aria-label
+        "button[aria-label*='Закрыть']",
+        "button[aria-label*='закрыть']", 
+        "button[aria-label*='Close']",
+        "button[aria-label*='close']",
+        # По data-testid
+        "[data-testid*='close']",
+        "[data-testid*='Close']",
+        # Общие селекторы для модальных окон
+        ".modal-close",
+        ".close-button",
+        ".dialog-close",
+        # Поиск по viewBox SVG
+        "svg[viewBox='0 0 24 24']:has(use[xlink:href='#cancel_24'])",
+        "button:has(svg[viewBox='0 0 24 24']:has(use[xlink:href='#cancel_24']))"
+    ]
+    
+    close_btn = None
+    found_selector = None
+    
+    # Ищем кнопку закрытия
+    for selector in close_selectors:
+        try:
+            elements = page.locator(selector).all()
+            for element in elements:
+                if element.is_visible():
+                    close_btn = element
+                    found_selector = selector
+                    logging.info(f"✅ Найдена видимая кнопка закрытия: {selector}")
+                    break
+            if close_btn:
+                break
+        except Exception as e:
+            logging.debug(f"Ошибка при поиске по селектору '{selector}': {e}")
+            continue
+    
+    if not close_btn:
+        logging.warning("⚠️  Кнопка закрытия статистики не найдена, пробуем альтернативные методы...")
+        return _close_stats_fallback(page)
+    
+    # Пробуем несколько методов клика
+    success = False
+    
+    # Метод 1: Обычный клик
+    try:
+        logging.info(f"🖱️  Пробуем обычный клик по: {found_selector}")
+        close_btn.scroll_into_view_if_needed()
+        page.wait_for_timeout(500)
+        close_btn.click(timeout=5000)
+        page.wait_for_timeout(2000)
+        logging.info("✅ Статистика закрыта (обычный клик)")
+        success = True
+    except Exception as e:
+        logging.warning(f"⚠️  Обычный клик не сработал: {e}")
+    
+    # Метод 2: Принудительный клик через JavaScript
+    if not success:
+        try:
+            logging.info("🖱️  Пробуем принудительный клик через JS...")
+            page.evaluate("arguments[0].click()", close_btn.element_handle())
+            page.wait_for_timeout(2000)
+            logging.info("✅ Статистика закрыта (JS клик)")
+            success = True
+        except Exception as e:
+            logging.warning(f"⚠️  JS клик не сработал: {e}")
+    
+    # Метод 3: Событие клика через dispatchEvent
+    if not success:
+        try:
+            logging.info("🖱️  Пробуем событие клика через dispatchEvent...")
+            page.evaluate("""
+                arguments[0].dispatchEvent(new MouseEvent('click', {
+                    view: window,
+                    bubbles: true,
+                    cancelable: true
+                }));
+            """, close_btn.element_handle())
+            page.wait_for_timeout(2000)
+            logging.info("✅ Статистика закрыта (dispatchEvent)")
+            success = True
+        except Exception as e:
+            logging.warning(f"⚠️  dispatchEvent не сработал: {e}")
+    
+    # Метод 4: Клик по координатам
+    if not success:
+        try:
+            logging.info("🖱️  Пробуем клик по координатам...")
+            bbox = close_btn.bounding_box()
+            if bbox:
+                x = bbox['x'] + bbox['width'] / 2
+                y = bbox['y'] + bbox['height'] / 2
+                page.mouse.click(x, y)
+                page.wait_for_timeout(2000)
+                logging.info("✅ Статистика закрыта (клик по координатам)")
+                success = True
+        except Exception as e:
+            logging.warning(f"⚠️  Клик по координатам не сработал: {e}")
+    
+    if not success:
+        logging.warning("⚠️  Все методы клика неуспешны, пробуем fallback...")
+        return _close_stats_fallback(page)
+    
+    return True
+
+
+def _close_stats_fallback(page):
+    """Альтернативные методы закрытия статистики."""
+    logging.info("🔄 Пробуем альтернативные методы закрытия...")
+    
+    # Метод 1: ESC
+    try:
+        logging.info("⌨️  Пробуем ESC...")
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(2000)
+        logging.info("✅ Попытка закрытия через ESC")
+        return True
+    except Exception as e:
+        logging.warning(f"⚠️  ESC не сработал: {e}")
+    
+    # Метод 2: Клик по overlay/backdrop
+    try:
+        logging.info("🖱️  Пробуем клик по overlay...")
+        overlay_selectors = [
+            ".modal-backdrop",
+            ".overlay",
+            ".dialog-backdrop",
+            "[class*='overlay']",
+            "[class*='backdrop']"
+        ]
+        
+        for selector in overlay_selectors:
+            overlay = page.locator(selector).first
+            if overlay.count() > 0:
+                overlay.click()
+                page.wait_for_timeout(2000)
+                logging.info(f"✅ Закрыто через overlay: {selector}")
+                return True
+    except Exception as e:
+        logging.warning(f"⚠️  Клик по overlay не сработал: {e}")
+    
+    # Метод 3: Поиск любых кнопок с текстом "Закрыть"
+    try:
+        logging.info("🔍 Ищем кнопки с текстом 'Закрыть'...")
+        close_text_selectors = [
+            "button:has-text('Закрыть')",
+            "button:has-text('закрыть')",
+            "button:has-text('Close')",
+            "button:has-text('close')",
+            "[role='button']:has-text('Закрыть')",
+            "a:has-text('Закрыть')"
+        ]
+        
+        for selector in close_text_selectors:
+            btn = page.locator(selector).first
+            if btn.count() > 0 and btn.is_visible():
+                btn.click()
+                page.wait_for_timeout(2000)
+                logging.info(f"✅ Закрыто через текстовую кнопку: {selector}")
+                return True
+    except Exception as e:
+        logging.warning(f"⚠️  Поиск текстовых кнопок не сработал: {e}")
+    
+    # Метод 4: Попробуем вернуться назад в браузере
+    try:
+        logging.info("⬅️  Пробуем вернуться назад...")
+        page.go_back()
+        page.wait_for_timeout(3000)
+        logging.info("✅ Возврат назад выполнен")
+        return True
+    except Exception as e:
+        logging.warning(f"⚠️  Возврат назад не сработал: {e}")
+    
+    logging.error("❌ Все методы закрытия статистики неуспешны")
+    return False
+
+
+def _clear_search(page):
+    """Очищает поле поиска по крестику."""
+    logging.info("🧹 Очищаем поиск...")
+    
+    # Ищем крестик для очистки поиска (SVG с cancel_16)
+    clear_selectors = [
+        "svg.vkuiIcon--cancel_16",
+        "svg[class*='cancel_16']",
+        "button:has(svg.vkuiIcon--cancel_16)",
+        "button:has(svg[class*='cancel_16'])",
+        "[data-testid*='clear']",
+        "input[type='search'] + button",
+        ".search-clear"
+    ]
+    
+    clear_btn = None
+    for selector in clear_selectors:
+        clear_btn = page.locator(selector).first
+        if clear_btn.count() > 0:
+            logging.info(f"✅ Найдена кнопка очистки поиска: {selector}")
+            break
+    
+    if clear_btn and clear_btn.count() > 0:
+        try:
+            clear_btn.click()
+            page.wait_for_timeout(1500)
+            logging.info("✅ Поиск очищен")
+        except Exception as e:
+            logging.warning(f"⚠️  Ошибка при очистке поиска: {e}")
+            # Fallback: очищаем поле вручную
+            _clear_search_fallback(page)
+    else:
+        logging.warning("⚠️  Кнопка очистки поиска не найдена, пробуем fallback")
+        _clear_search_fallback(page)
+
+
+def _clear_search_fallback(page):
+    """Fallback метод для очистки поиска."""
+    search_selectors = [
+        "input[type='search']",
+        "input[placeholder*='Поиск']",
+        "input[placeholder*='поиск']",
+        "[data-testid*='search'] input",
+        ".search input",
+        "input[name*='search']",
+    ]
+    
+    for selector in search_selectors:
+        inp = page.locator(selector).first
+        if inp.count() > 0:
+            try:
+                inp.click()
+                page.wait_for_timeout(500)
+                inp.fill("")
+                page.wait_for_timeout(1000)
+                logging.info("✅ Поиск очищен (fallback)")
+                return
+            except Exception as e:
+                logging.warning(f"⚠️  Fallback очистка не удалась: {e}")
+    
+    logging.warning("⚠️  Не удалось очистить поиск")
