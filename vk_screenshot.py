@@ -3,6 +3,7 @@ import json
 import logging
 from playwright.sync_api import sync_playwright
 from screenshot_utils import draw_browser_bar
+from vk_ads_context import create_vk_ads_context
 
 def load_vk_cookies():
     with open('vk_storage.json', 'r', encoding='utf-8') as f:
@@ -11,8 +12,7 @@ def load_vk_cookies():
 
 def take_screenshot_with_views(url, output_file):
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
-        context = browser.new_context(viewport={"width": 1280, "height": 1000})
+        context = create_vk_ads_context(p, viewport={"width": 1280, "height": 720})
 
         cookies = load_vk_cookies()
         context.add_cookies(cookies)
@@ -23,7 +23,7 @@ def take_screenshot_with_views(url, output_file):
             page.goto(url, timeout=60000, wait_until="domcontentloaded")
         except Exception as e:
             logging.error(f"Ошибка загрузки страницы: {e}")
-            browser.close()
+            context.close()
             return
 
         page.wait_for_timeout(4000)
@@ -65,7 +65,7 @@ def take_screenshot_with_views(url, output_file):
         except Exception as e:
             logging.error(f"Ошибка при создании скрина: {e}")
         finally:
-            browser.close()
+            context.close()
 
     draw_browser_bar(output_file, url)
 

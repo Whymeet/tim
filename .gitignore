@@ -45,3 +45,4 @@ vk_storage.json
 
 # Log files
 vk_ads_log_*.txt
+.playwright-profile/
