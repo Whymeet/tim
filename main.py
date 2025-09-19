@@ -35,7 +35,7 @@ def main() -> None:
     output_dir = "assets"
     output_doc = "Отчет.docx"
     ads_url = (
-        "https://ads.vk.com/hq/dashboard/ad_groups"
+        "https://ads.vk.com/hq/dashboard/ad_plans"
         "?sudo=vkads_3012708486%40mailru"
         "&mode=ads&attribution=conversion"
         "&date_from=01.08.2025&date_to=31.08.2025"
