@@ -43,15 +43,25 @@ def take_screenshot_with_views(url, output_file):
                 post_box = post.first.bounding_box()
                 if post_box:
                     # Расширяем область захвата для более широкого скриншота
-                    page_width = page.evaluate("document.documentElement.scrollWidth")
-                    viewport_width = page.evaluate("window.innerWidth")
+                    page_width = page.evaluate("document.documentElement.scrollWidth") or 0
+                    viewport_width = page.evaluate("window.innerWidth") or 0
+                    if viewport_width <= 0:
+                        viewport_width = 1280  # fallback to the configured viewport
+                    if page_width <= 0:
+                        page_width = viewport_width
+
                     full_width = max(page_width, viewport_width, 1200)  # Минимум 1200px
-                    
+                    clip_width = min(full_width, viewport_width)
+
+                    post_center_x = post_box["x"] + post_box["width"] / 2
+                    max_x_offset = max(page_width - clip_width, 0)
+                    clip_x = max(0, min(post_center_x - clip_width / 2, max_x_offset))
+
                     # Создаем расширенную область
                     expanded_area = {
-                        "x": 0,  # Начинаем с левого края
+                        "x": clip_x,
                         "y": max(0, post_box["y"] - 50),  # Отступ сверху
-                        "width": full_width,  # Полная ширина
+                        "width": clip_width,
                         "height": post_box["height"] + 100  # Отступ снизу
                     }
                     
