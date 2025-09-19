@@ -16,6 +16,253 @@ import logging
 __all__ = ["screenshot_group_stats"]
 
 
+# ────────────────────────────── auth helpers ─────────────────────────────────
+
+
+def _handle_vk_id_auth(page):
+    """Обрабатывает первичную авторизацию через VK ID."""
+    logging.info("🔐 Проверяем необходимость авторизации через VK ID...")
+    
+    # Ждем загрузки страницы
+    page.wait_for_timeout(3000)
+    
+    # Проверяем, находимся ли мы на странице VK ID авторизации
+    vk_id_indicators = [
+        "title:has-text('VK ID')",
+        "text=Продолжить как",
+        "[class*='vkuiButton__content']:has-text('Продолжить как')",
+        "body[scheme='space_gray']"
+    ]
+    
+    is_vk_id_page = False
+    for indicator in vk_id_indicators:
+        if page.locator(indicator).count() > 0:
+            is_vk_id_page = True
+            logging.info(f"✅ Обнаружена страница VK ID по индикатору: {indicator}")
+            break
+    
+    if not is_vk_id_page:
+        logging.info("ℹ️  Страница VK ID не обнаружена, авторизация не требуется")
+        return True
+    
+    # Ищем кнопку "Продолжить как [Имя]"
+    continue_button_selectors = [
+        "span.vkuiButton__content:has-text('Продолжить как')",
+        "[class*='vkuiButton__content']:has-text('Продолжить как')",
+        "button:has-text('Продолжить как')",
+        "[role='button']:has-text('Продолжить как')",
+        "span:has-text('Продолжить как Тимофей')",
+        "[data-testid*='continue']",
+        "[class*='Button']:has-text('Продолжить')"
+    ]
+    
+    continue_button = None
+    for selector in continue_button_selectors:
+        elements = page.locator(selector).all()
+        for element in elements:
+            if element.is_visible() and "продолжить как" in element.text_content().lower():
+                continue_button = element
+                logging.info(f"✅ Найдена кнопка продолжения: {selector}")
+                break
+        if continue_button:
+            break
+    
+    if not continue_button:
+        logging.warning("⚠️  Кнопка 'Продолжить как...' не найдена")
+        return False
+    
+    try:
+        # Кликаем на кнопку "Продолжить как..."
+        continue_button.scroll_into_view_if_needed()
+        page.wait_for_timeout(1000)
+        continue_button.click()
+        logging.info("✅ Нажата кнопка 'Продолжить как...'")
+        
+        # Ждем появления модального окна
+        page.wait_for_timeout(3000)
+        
+        # Обрабатываем страницу подтверждения VK ID
+        return _handle_modal_confirmation(page)
+        
+    except Exception as e:
+        logging.error(f"❌ Ошибка при нажатии кнопки продолжения: {e}")
+        return False
+
+
+def _handle_modal_confirmation(page):
+    """Обрабатывает страницу подтверждения VK ID после нажатия 'Продолжить как...'."""
+    logging.info("🪟 Обрабатываем страницу подтверждения VK ID...")
+    
+    # Ждем загрузки страницы подтверждения
+    page.wait_for_timeout(3000)
+    
+    # Проверяем, находимся ли мы на странице подтверждения VK ID
+    vkid_confirmation_indicators = [
+        "title:has-text('VK ID')",
+        "body[scheme='bright_light']",
+        "text=Туркин Тимофей",
+        "text=Физическое лицо",
+        "span:has-text('Туркин Тимофей')",
+        "[class*='vkuiSimpleCell']:has-text('Туркин Тимофей')",
+        "text=Разрешить",
+        "text=Подтвердить",
+        "text=Войти"
+    ]
+    
+    is_confirmation_page = False
+    for indicator in vkid_confirmation_indicators:
+        if page.locator(indicator).count() > 0:
+            is_confirmation_page = True
+            logging.info(f"✅ Обнаружена страница подтверждения VK ID по индикатору: {indicator}")
+            break
+    
+    if not is_confirmation_page:
+        logging.info("ℹ️  Страница подтверждения не обнаружена, возможно, авторизация прошла автоматически")
+        return True
+    
+    # Ищем элемент с именем "Туркин Тимофей" или кнопки подтверждения на странице VK ID
+    confirmation_selectors = [
+        # Элемент с именем пользователя (приоритетный)
+        "span:has-text('Туркин Тимофей')",
+        "[class*='vkuiSimpleCell']:has-text('Туркин Тимофей')",
+        "[class*='vkuiHeadline']:has-text('Туркин Тимофей')",
+        "div:has-text('Туркин Тимофей')",
+        
+        # Селекторы по структуре из HTML
+        "div.vkuiSimpleCell__middle:has-text('Туркин Тимофей')",
+        "span.vkuiSimpleCell__children:has-text('Туркин Тимофей')",
+        
+        # Основные кнопки подтверждения
+        "button:has-text('Разрешить')",
+        "button:has-text('Подтвердить')",
+        "button:has-text('Войти')",
+        "button:has-text('Продолжить')",
+        
+        # VK UI кнопки
+        "[class*='vkuiButton']:has-text('Разрешить')",
+        "[class*='vkuiButton']:has-text('Подтвердить')",
+        "[class*='vkuiButton']:has-text('Войти')",
+        "[class*='vkuiButton']:has-text('Продолжить')",
+        
+        # Роли кнопок
+        "[role='button']:has-text('Разрешить')",
+        "[role='button']:has-text('Подтвердить')",
+        "[role='button']:has-text('Войти')",
+        "[role='button']:has-text('Продолжить')",
+        
+        # Кликабельные элементы с классами VK UI
+        "[class*='vkuiTappable']",
+        "[class*='vkuiRipple']",
+        
+        # Data атрибуты
+        "[data-testid*='confirm']",
+        "[data-testid*='continue']",
+        "[data-testid*='allow']",
+        "[data-testid*='authorize']",
+        
+        # Любые видимые кнопки на странице (как fallback)
+        "button[type='submit']",
+        "input[type='submit']"
+    ]
+    
+    confirmation_element = None
+    for selector in confirmation_selectors:
+        logging.info(f"Проверяем селектор для подтверждения VK ID: {selector}")
+        elements = page.locator(selector).all()
+        for element in elements:
+            if element.is_visible():
+                text_content = element.text_content()
+                logging.info(f"Найден элемент: {selector}, текст: {text_content}")
+                
+                # Если это элемент с именем пользователя - это приоритетный выбор
+                if "Туркин Тимофей" in text_content:
+                    logging.info("✅ Найден элемент с именем пользователя - используем его")
+                    confirmation_element = element
+                    break
+                # Если не нашли имя пользователя, используем первый подходящий элемент
+                elif not confirmation_element:
+                    confirmation_element = element
+                    logging.info(f"✅ Найден элемент подтверждения: {selector}")
+        
+        # Если нашли элемент с именем пользователя, прерываем поиск
+        if confirmation_element and "Туркин Тимофей" in confirmation_element.text_content():
+            break
+    
+    if not confirmation_element:
+        logging.warning("⚠️  Кнопка подтверждения не найдена на странице VK ID")
+        
+        # Попробуем найти любую кнопку на странице
+        all_buttons = page.locator("button, [role='button'], input[type='submit']").all()
+        visible_buttons = [btn for btn in all_buttons if btn.is_visible()]
+        
+        if visible_buttons:
+            logging.info(f"🔍 Найдено {len(visible_buttons)} видимых кнопок, пробуем первую")
+            confirmation_element = visible_buttons[0]
+        else:
+            # Пробуем нажать Enter для подтверждения
+            try:
+                page.keyboard.press("Enter")
+                page.wait_for_timeout(3000)
+                logging.info("✅ Попытка подтверждения через Enter")
+                return True
+            except:
+                logging.warning("⚠️  Enter не сработал")
+                return True
+    
+    try:
+        # Несколько методов клика для надежности
+        success = False
+        
+        # Метод 1: Обычный клик
+        try:
+            confirmation_element.scroll_into_view_if_needed()
+            page.wait_for_timeout(500)
+            confirmation_element.click(timeout=5000)
+            page.wait_for_timeout(3000)  # Увеличено время ожидания
+            logging.info("✅ Подтверждение VK ID выполнено (обычный клик)")
+            success = True
+        except Exception as e:
+            logging.warning(f"⚠️  Обычный клик не сработал: {e}")
+        
+        # Метод 2: JS клик
+        if not success:
+            try:
+                page.evaluate("arguments[0].click()", confirmation_element.element_handle())
+                page.wait_for_timeout(3000)
+                logging.info("✅ Подтверждение VK ID выполнено (JS клик)")
+                success = True
+            except Exception as e:
+                logging.warning(f"⚠️  JS клик не сработал: {e}")
+        
+        # Метод 3: Enter на элементе
+        if not success:
+            try:
+                confirmation_element.focus()
+                page.keyboard.press("Enter")
+                page.wait_for_timeout(3000)
+                logging.info("✅ Подтверждение VK ID выполнено (Enter)")
+                success = True
+            except Exception as e:
+                logging.warning(f"⚠️  Enter не сработал: {e}")
+        
+        # Дополнительное ожидание после подтверждения
+        if success:
+            page.wait_for_timeout(2000)
+            
+            # Проверяем, что мы покинули страницу подтверждения
+            try:
+                page.wait_for_load_state("networkidle", timeout=10000)
+                logging.info("✅ Страница загружена после подтверждения")
+            except:
+                logging.warning("⚠️  networkidle не достигнут, но продолжаем")
+        
+        return success
+        
+    except Exception as e:
+        logging.error(f"❌ Ошибка при подтверждении VK ID: {e}")
+        return False
+
+
 # ────────────────────────────── helpers ─────────────────────────────────────
 
 
@@ -426,6 +673,16 @@ def screenshot_group_stats(
         except Exception:
             logging.warning("⚠️  networkidle wasn't reached – continuing …")
         
+        # Обработка первичной авторизации VK ID
+        if not _handle_vk_id_auth(page):
+            logging.warning("⚠️  Возможны проблемы с авторизацией VK ID")
+        
+        # Дополнительное ожидание после авторизации
+        try:
+            page.wait_for_load_state("networkidle", timeout=15_000)
+        except Exception:
+            logging.warning("⚠️  networkidle после авторизации не достигнут – продолжаем...")
+        
         # Устанавливаем масштаб страницы для лучшего отображения графиков
         page.evaluate(f"document.body.style.zoom = '{zoom_level}'")
         page.wait_for_timeout(6_000)  # Увеличено в 2 раза
@@ -437,141 +694,18 @@ def screenshot_group_stats(
             ctx.storage_state(path="vk_storage.json")
 
         # Search ------------------------------------------------------------
-        def _apply_search(q: str):
-            logging.info(f"🔍 Поиск рекламного плана: '{q}'")
-
-            search_selectors = [
-                "input[type='search']",
-                "input[placeholder*='Поиск']",
-                "input[placeholder*='поиск']",
-                "[data-testid*='search'] input",
-                ".search input",
-                "input[name*='search']",
-            ]
-
-            inp = None
-            for selector in search_selectors:
-                inp = page.locator(selector).first
-                if inp.count() > 0:
-                    logging.info(f"✅ Найдено поле поиска: {selector}")
-                    break
-
-            if not inp or inp.count() == 0:
-                logging.error("❌ Поле поиска не найдено, попробуем продолжить без поиска")
-                return False
-
-            try:
-                inp.click()
-                page.wait_for_timeout(1000)  # Увеличено в 2 раза
-                inp.fill("")
-                page.wait_for_timeout(600)  # Увеличено в 2 раза
-                inp.fill(q)
-                page.wait_for_timeout(1000)  # Увеличено в 2 раза
-                page.keyboard.press("Enter")
-                page.wait_for_timeout(4_000)  # Увеличено в 2 раза
-
-                contains = page.locator(
-                    "[data-testid='search-contains-menu-item']"
-                ).first
-                if contains.count():
-                    contains.click()
-                    page.wait_for_timeout(2_000)  # Увеличено в 2 раза
-                    logging.info("✅ Выбран вариант 'содержит'")
-
-                return True
-            except Exception as e:
-                logging.error(f"⚠️  Ошибка при поиске: {e}")
-                return False
-
         # Приводим название группы к верхнему регистру для поиска
         group_name_upper = group_name.upper()
-        _apply_search(group_name_upper)
+        
+        # Выполняем поиск
+        if not _apply_search_optimized(page, group_name_upper):
+            raise RuntimeError(f"❌ Не удалось выполнить поиск для группы: {group_name_upper}")
+        
         page.wait_for_timeout(4_000)  # Увеличено в 2 раза
 
-        # Поиск рекламного плана ----------------------------------------
-        logging.info(f"🔍 Ищем рекламный план '{group_name_upper}' в таблице...")
-
-        link_selectors = [
-            f"[data-testid='name-link']:has-text('{group_name_upper}')",
-            f"a:has-text('{group_name_upper}')",
-            f"[data-testid='name-link']",
-            f"td a:has-text('{group_name_upper}')",
-            f"tr:has-text('{group_name_upper}') [data-testid='name-link']",
-        ]
-
-        link = None
-        for selector in link_selectors:
-            link = page.locator(selector).first
-            if link.count() > 0 and group_name_upper in (link.text_content() or "").upper():
-                logging.info(f"✅ Найден план: {link.text_content().strip()}")
-                break
-
-        if not link or link.count() == 0:
-            raise RuntimeError(
-                f"❌ Рекламный план '{group_name_upper}' не найден! Проверьте название."
-            )
-
-        # Находим родительскую строку таблицы
-        row = link.locator("xpath=ancestor::tr").first
-        if row.count() == 0:
-            row = link.locator("..").locator("..").first
-
-        try:
-            row.scroll_into_view_if_needed(timeout=20_000)  # Увеличено в 2 раза
-            page.wait_for_timeout(800)  # Увеличено в 2 раза
-        except Exception as e:
-            logging.warning(f"⚠️  Ошибка при прокрутке к строке: {e}")
-
-        # ─── Новое: ховерим строку, чтобы появились иконки действий ────
-        try:
-            row.hover(timeout=10_000)  # Увеличено в 2 раза
-            page.wait_for_timeout(600)  # Увеличено в 2 раза
-            logging.info("🖱️  Навели курсор на строку плана — иконки должны появиться")
-        except Exception as e:
-            logging.warning(f"⚠️  Не удалось навести курсор на строку: {e}")
-
-        # Поиск кнопки статистики --------------------------------------
-        logging.info("📊 Открываем статистику...")
-
-        stats_selectors = [
-            "a[data-testid='stats']",
-            "[data-testid='stats']",
-            "button[title*='Статистика']",
-            "a[title*='Статистика']",
-            "svg.vkuiIcon--poll_outline_20",
-            "svg[class*='poll_outline']",
-            "svg[aria-label*='Статистика']",
-            "button:has(svg[class*='poll_outline'])",
-        ]
-
-        def _find_stats_button(scope):
-            for sel in stats_selectors:
-                btn = scope.locator(sel).first
-                if btn.count() > 0:
-                    logging.info(f"✅ Найдена кнопка статистики: {sel}")
-                    return btn
-            return None
-
-        btn = _find_stats_button(row) or _find_stats_button(page)
-        if not btn:
-            # Быстрая диагностика: покажем, какие svg-иконки есть в строке
-            svgs = row.locator("svg").all()
-            logging.warning(f"❔ В строке найдено SVG-иконок: {len(svgs)}")
-            for i, svg in enumerate(svgs[:5], 1):
-                try:
-                    logging.info(f"  {i}. {svg.get_attribute('class')}")
-                except Exception:
-                    pass
-            raise RuntimeError(
-                "❌ Кнопка статистики не найдена – возможно, изменился интерфейс"
-            )
-
-        try:
-            btn.click()
-            page.wait_for_timeout(8_000)  # Увеличено в 2 раза
-            logging.info("✅ Статистика открыта")
-        except Exception as e:
-            raise RuntimeError(f"⚠️  Ошибка при клике на статистику: {e}") from e
+        # Открытие статистики с автоматической очисткой поиска при ненахождении
+        if not _open_group_stats(page, group_name_upper):
+            raise RuntimeError(f"❌ Рекламный план '{group_name_upper}' не найден! Проверьте название.")
 
         # Убеждаемся, что папка всё ещё существует
         _safe_mkdir(output_dir)
@@ -688,6 +822,16 @@ def screenshot_multiple_groups_stats(
             page.wait_for_load_state("networkidle", timeout=10_000)
         except Exception:
             logging.warning("⚠️  networkidle не достигнут – продолжаем...")
+        
+        # Обработка первичной авторизации VK ID
+        if not _handle_vk_id_auth(page):
+            logging.warning("⚠️  Возможны проблемы с авторизацией VK ID")
+        
+        # Дополнительное ожидание после авторизации
+        try:
+            page.wait_for_load_state("networkidle", timeout=15_000)
+        except Exception:
+            logging.warning("⚠️  networkidle после авторизации не достигнут – продолжаем...")
         
         # Устанавливаем масштаб страницы
         page.evaluate(f"document.body.style.zoom = '{zoom_level}'")
@@ -820,6 +964,8 @@ def _open_group_stats(page, group_name_upper: str) -> bool:
     
     if not link or link.count() == 0:
         logging.error(f"❌ Рекламный план '{group_name_upper}' не найден!")
+        logging.info("🧹 Очищаем поиск для следующего запроса...")
+        _clear_search(page)
         return False
     
     # Находим родительскую строку
@@ -865,6 +1011,8 @@ def _open_group_stats(page, group_name_upper: str) -> bool:
     btn = _find_stats_button(row) or _find_stats_button(page)
     if not btn:
         logging.error("❌ Кнопка статистики не найдена")
+        logging.info("🧹 Очищаем поиск для следующего запроса...")
+        _clear_search(page)
         return False
     
     try:
@@ -874,6 +1022,8 @@ def _open_group_stats(page, group_name_upper: str) -> bool:
         return True
     except Exception as e:
         logging.error(f"⚠️  Ошибка при клике на статистику: {e}")
+        logging.info("🧹 Очищаем поиск для следующего запроса...")
+        _clear_search(page)
         return False
 
 
@@ -1138,30 +1288,96 @@ def _clear_search(page):
     
     # Ищем крестик для очистки поиска (SVG с cancel_16)
     clear_selectors = [
+        # Точные селекторы для VK cancel_16 SVG из вашего примера
         "svg.vkuiIcon--cancel_16",
-        "svg[class*='cancel_16']",
+        "svg[class*='vkuiIcon--cancel_16']",
+        "svg[class*='vkuiIcon vkuiIcon--16 vkuiIcon--w-16 vkuiIcon--h-16 vkuiIcon--cancel_16']",
+        "svg.vkuiIcon--16.vkuiIcon--cancel_16",
+        # SVG с use и xlink:href для cancel_16
+        "svg:has(use[xlink:href='#cancel_16'])",
+        "svg[viewBox='0 0 16 16']:has(use[xlink:href='#cancel_16'])",
+        # Кнопки, содержащие эти SVG
         "button:has(svg.vkuiIcon--cancel_16)",
         "button:has(svg[class*='cancel_16'])",
+        "button:has(svg:has(use[xlink:href='#cancel_16']))",
+        "[role='button']:has(svg[class*='cancel_16'])",
+        # Дополнительные селекторы
         "[data-testid*='clear']",
+        "[data-testid*='search-clear']",
         "input[type='search'] + button",
-        ".search-clear"
+        ".search-clear",
+        # Поиск по aria-label
+        "button[aria-label*='очистить']",
+        "button[aria-label*='Очистить']",
+        "button[aria-label*='clear']",
+        "button[aria-label*='Clear']"
     ]
     
     clear_btn = None
-    for selector in clear_selectors:
-        clear_btn = page.locator(selector).first
-        if clear_btn.count() > 0:
-            logging.info(f"✅ Найдена кнопка очистки поиска: {selector}")
-            break
+    found_selector = None
     
-    if clear_btn and clear_btn.count() > 0:
+    # Ищем видимую кнопку очистки
+    for selector in clear_selectors:
         try:
-            clear_btn.click()
-            page.wait_for_timeout(1500)
-            logging.info("✅ Поиск очищен")
+            elements = page.locator(selector).all()
+            for element in elements:
+                if element.is_visible():
+                    clear_btn = element
+                    found_selector = selector
+                    logging.info(f"✅ Найдена видимая кнопка очистки поиска: {selector}")
+                    break
+            if clear_btn:
+                break
+        except Exception as e:
+            logging.debug(f"Ошибка при поиске по селектору '{selector}': {e}")
+            continue
+    
+    if clear_btn:
+        try:
+            # Пробуем несколько методов клика
+            success = False
+            
+            # Метод 1: Обычный клик
+            try:
+                clear_btn.scroll_into_view_if_needed()
+                page.wait_for_timeout(300)
+                clear_btn.click(timeout=3000)
+                page.wait_for_timeout(1500)
+                logging.info("✅ Поиск очищен (обычный клик)")
+                success = True
+            except Exception as e:
+                logging.warning(f"⚠️  Обычный клик не сработал: {e}")
+            
+            # Метод 2: JS клик
+            if not success:
+                try:
+                    page.evaluate("arguments[0].click()", clear_btn.element_handle())
+                    page.wait_for_timeout(1500)
+                    logging.info("✅ Поиск очищен (JS клик)")
+                    success = True
+                except Exception as e:
+                    logging.warning(f"⚠️  JS клик не сработал: {e}")
+            
+            # Метод 3: Клик по координатам
+            if not success:
+                try:
+                    bbox = clear_btn.bounding_box()
+                    if bbox:
+                        x = bbox['x'] + bbox['width'] / 2
+                        y = bbox['y'] + bbox['height'] / 2
+                        page.mouse.click(x, y)
+                        page.wait_for_timeout(1500)
+                        logging.info("✅ Поиск очищен (клик по координатам)")
+                        success = True
+                except Exception as e:
+                    logging.warning(f"⚠️  Клик по координатам не сработал: {e}")
+            
+            if not success:
+                logging.warning("⚠️  Все методы клика неуспешны, пробуем fallback")
+                _clear_search_fallback(page)
+                
         except Exception as e:
             logging.warning(f"⚠️  Ошибка при очистке поиска: {e}")
-            # Fallback: очищаем поле вручную
             _clear_search_fallback(page)
     else:
         logging.warning("⚠️  Кнопка очистки поиска не найдена, пробуем fallback")
