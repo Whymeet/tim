@@ -1096,16 +1096,40 @@ def _close_group_stats(page):
     # Ждем стабилизации страницы
     page.wait_for_timeout(1000)
     
-    # Более точные селекторы для кнопки закрытия
+    # Сначала пытаемся убрать overlay, который может блокировать клик
+    try:
+        overlay_selectors = [
+            "div.RightSidebar.module_overlay__ZmY2O",
+            "[class*='overlay']",
+            "[class*='backdrop']"
+        ]
+        for overlay_selector in overlay_selectors:
+            overlay = page.locator(overlay_selector).first
+            if overlay.count() > 0:
+                logging.info(f"🔍 Найден блокирующий overlay: {overlay_selector}")
+                # Скрываем overlay через CSS
+                page.evaluate(f"document.querySelector('{overlay_selector}').style.display = 'none'")
+                page.wait_for_timeout(500)
+                break
+    except Exception as e:
+        logging.debug(f"Не удалось убрать overlay: {e}")
+    
+    # Более точные селекторы для кнопки закрытия (добавлен cancel_16)
     close_selectors = [
-        # Точный селектор для SVG с cancel_24
+        # Точные селекторы для SVG с cancel (24 и 16)
         "svg.vkuiIcon--cancel_24",
+        "svg.vkuiIcon--cancel_16", 
         "svg[class*='vkuiIcon--cancel_24']",
+        "svg[class*='vkuiIcon--cancel_16']",
         "svg[class*='cancel_24']",
+        "svg[class*='cancel_16']",
         # Кнопки, содержащие этот SVG
         "button:has(svg.vkuiIcon--cancel_24)",
+        "button:has(svg.vkuiIcon--cancel_16)",
         "button:has(svg[class*='cancel_24'])",
+        "button:has(svg[class*='cancel_16'])",
         "[role='button']:has(svg[class*='cancel_24'])",
+        "[role='button']:has(svg[class*='cancel_16'])",
         # Родительские элементы с aria-label
         "button[aria-label*='Закрыть']",
         "button[aria-label*='закрыть']", 
@@ -1120,7 +1144,9 @@ def _close_group_stats(page):
         ".dialog-close",
         # Поиск по viewBox SVG
         "svg[viewBox='0 0 24 24']:has(use[xlink:href='#cancel_24'])",
-        "button:has(svg[viewBox='0 0 24 24']:has(use[xlink:href='#cancel_24']))"
+        "svg[viewBox='0 0 16 16']:has(use[xlink:href='#cancel_16'])",
+        "button:has(svg[viewBox='0 0 24 24']:has(use[xlink:href='#cancel_24']))",
+        "button:has(svg[viewBox='0 0 16 16']:has(use[xlink:href='#cancel_16']))"
     ]
     
     close_btn = None
@@ -1149,23 +1175,34 @@ def _close_group_stats(page):
     # Пробуем несколько методов клика
     success = False
     
-    # Метод 1: Обычный клик
+    # Метод 1: Принудительный клик (игнорирует перекрывающие элементы)
     try:
-        logging.info(f"🖱️  Пробуем обычный клик по: {found_selector}")
+        logging.info(f"🖱️  Пробуем принудительный клик по: {found_selector}")
         close_btn.scroll_into_view_if_needed()
         page.wait_for_timeout(500)
-        close_btn.click(timeout=5000)
+        close_btn.click(force=True, timeout=5000)
         page.wait_for_timeout(2000)
-        logging.info("✅ Статистика закрыта (обычный клик)")
+        logging.info("✅ Статистика закрыта (принудительный клик)")
         success = True
     except Exception as e:
-        logging.warning(f"⚠️  Обычный клик не сработал: {e}")
+        logging.warning(f"⚠️  Принудительный клик не сработал: {e}")
+        
+    # Метод 1.5: Обычный клик (если принудительный не сработал)
+    if not success:
+        try:
+            logging.info(f"🖱️  Пробуем обычный клик по: {found_selector}")
+            close_btn.click(timeout=5000)
+            page.wait_for_timeout(2000)
+            logging.info("✅ Статистика закрыта (обычный клик)")
+            success = True
+        except Exception as e:
+            logging.warning(f"⚠️  Обычный клик не сработал: {e}")
     
     # Метод 2: Принудительный клик через JavaScript
     if not success:
         try:
             logging.info("🖱️  Пробуем принудительный клик через JS...")
-            page.evaluate("arguments[0].click()", close_btn.element_handle())
+            page.evaluate("element => element.click()", close_btn.element_handle())
             page.wait_for_timeout(2000)
             logging.info("✅ Статистика закрыта (JS клик)")
             success = True
@@ -1177,11 +1214,11 @@ def _close_group_stats(page):
         try:
             logging.info("🖱️  Пробуем событие клика через dispatchEvent...")
             page.evaluate("""
-                arguments[0].dispatchEvent(new MouseEvent('click', {
+                element => element.dispatchEvent(new MouseEvent('click', {
                     view: window,
                     bubbles: true,
                     cancelable: true
-                }));
+                }))
             """, close_btn.element_handle())
             page.wait_for_timeout(2000)
             logging.info("✅ Статистика закрыта (dispatchEvent)")
