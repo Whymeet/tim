@@ -778,7 +778,7 @@ def screenshot_group_stats(
 
 
 def screenshot_multiple_groups_stats(
-    groups: list[str],
+    groups: list[dict],
     output_dir: str,
     ads_url: str,
     tabs: tuple[str, ...] | None = ("overview", "demography", "geo"),
@@ -791,7 +791,7 @@ def screenshot_multiple_groups_stats(
     """Оптимизированная функция для скриншотов нескольких групп в одном браузере.
     
     Args:
-        groups: Список названий групп для обработки
+        groups: Список словарей {"id": "118746396", "name": "ЦР25_...", "display_name": "..."}
         output_dir: Папка для сохранения скриншотов
         ads_url: URL страницы VK Ads
         tabs: Список вкладок для скриншотов
@@ -844,27 +844,30 @@ def screenshot_multiple_groups_stats(
             ctx.storage_state(path="vk_storage.json")
         
         # Обрабатываем каждую группу
-        for idx, group_name in enumerate(groups, 1):
-            group_name_upper = group_name.upper()
-            logging.info(f"📊 [{idx}/{len(groups)}] Обрабатываем группу: '{group_name_upper}'")
+        for idx, group in enumerate(groups, 1):
+            group_id = group.get("id", "")
+            group_name = group.get("name", "")
+            display_name = group.get("display_name", group_name)
+            
+            logging.info(f"📊 [{idx}/{len(groups)}] Обрабатываем группу: '{display_name}' (ID: {group_id})")
             
             try:
-                # Поиск группы
-                if not _apply_search_optimized(page, group_name_upper):
-                    logging.error(f"❌ Не удалось выполнить поиск для группы: {group_name_upper}")
-                    failed_groups.append(group_name_upper)
+                # Поиск группы по ID
+                if not _apply_search_optimized(page, group_id):
+                    logging.error(f"❌ Не удалось выполнить поиск по ID: {group_id}")
+                    failed_groups.append(group)
                     continue
                 
                 page.wait_for_timeout(4_000)
                 
-                # Открытие статистики
-                if not _open_group_stats(page, group_name_upper):
-                    logging.error(f"❌ Не удалось открыть статистику для группы: {group_name_upper}")
-                    failed_groups.append(group_name_upper)
+                # Открытие статистики (ищем по ID, но также можем использовать название как fallback)
+                if not _open_group_stats_by_id(page, group_id, display_name):
+                    logging.error(f"❌ Не удалось открыть статистику по ID: {group_id}")
+                    failed_groups.append(group)
                     continue
                 
-                # Создание скриншотов
-                _create_screenshots_for_group(page, group_name_upper, output_dir, tabs, demography_zoom, geo_zoom)
+                # Создание скриншотов (используем display_name для имен файлов)
+                _create_screenshots_for_group(page, display_name, output_dir, tabs, demography_zoom, geo_zoom)
                 
                 # Закрытие статистики
                 _close_group_stats(page)
@@ -873,12 +876,12 @@ def screenshot_multiple_groups_stats(
                 if idx < len(groups):
                     _clear_search(page)
                 
-                successful_groups.append(group_name_upper)
-                logging.info(f"✅ Группа {group_name_upper} обработана успешно")
+                successful_groups.append(group)
+                logging.info(f"✅ Группа {display_name} обработана успешно")
                 
             except Exception as e:
-                logging.error(f"❌ Ошибка при обработке группы {group_name_upper}: {e}")
-                failed_groups.append(group_name_upper)
+                logging.error(f"❌ Ошибка при обработке группы {display_name}: {e}")
+                failed_groups.append(group)
                 
                 # Пытаемся закрыть статистику в случае ошибки
                 try:
@@ -940,6 +943,112 @@ def _apply_search_optimized(page, query: str) -> bool:
         
     except Exception as e:
         logging.error(f"⚠️  Ошибка при поиске: {e}")
+        return False
+
+
+def _open_group_stats_by_id(page, group_id: str, display_name: str = "") -> bool:
+    """Открывает статистику для указанной группы по ID."""
+    logging.info(f"🔍 Ищем рекламный план по ID '{group_id}' (название: '{display_name}') в таблице...")
+    
+    # Сначала пытаемся найти по ID, если не получается - по названию
+    search_patterns = [group_id]
+    if display_name:
+        search_patterns.append(display_name.upper())
+    
+    link = None
+    found_text = ""
+    
+    for pattern in search_patterns:
+        logging.info(f"🔍 Поиск по паттерну: '{pattern}'")
+        
+        link_selectors = [
+            f"[data-testid='name-link']:has-text('{pattern}')",
+            f"a:has-text('{pattern}')",
+            f"td a:has-text('{pattern}')",
+            f"tr:has-text('{pattern}') [data-testid='name-link']",
+            # Общий поиск всех ссылок для проверки текста
+            "[data-testid='name-link']",
+        ]
+        
+        for selector in link_selectors:
+            elements = page.locator(selector).all()
+            for element in elements:
+                element_text = (element.text_content() or "").strip()
+                # Проверяем, содержит ли текст элемента искомый паттерн
+                if pattern in element_text or element_text.upper().find(pattern.upper()) >= 0:
+                    link = element
+                    found_text = element_text
+                    logging.info(f"✅ Найден план: '{found_text}' по паттерну '{pattern}'")
+                    break
+            
+            if link:
+                break
+        
+        if link:
+            break
+    
+    if not link:
+        logging.error(f"❌ Рекламный план с ID '{group_id}' или названием '{display_name}' не найден!")
+        logging.info("🧹 Очищаем поиск для следующего запроса...")
+        _clear_search(page)
+        return False
+    
+    # Находим родительскую строку
+    row = link.locator("xpath=ancestor::tr").first
+    if row.count() == 0:
+        row = link.locator("..").locator("..").first
+    
+    try:
+        row.scroll_into_view_if_needed(timeout=20_000)
+        page.wait_for_timeout(800)
+    except Exception as e:
+        logging.warning(f"⚠️  Ошибка при прокрутке к строке: {e}")
+    
+    # Ховерим строку для появления кнопок
+    try:
+        row.hover(timeout=10_000)
+        page.wait_for_timeout(600)
+        logging.info("🖱️  Навели курсор на строку плана")
+    except Exception as e:
+        logging.warning(f"⚠️  Не удалось навести курсор на строку: {e}")
+    
+    # Поиск кнопки статистики
+    logging.info("📊 Открываем статистику...")
+    stats_selectors = [
+        "a[data-testid='stats']",
+        "[data-testid='stats']",
+        "button[title*='Статистика']",
+        "a[title*='Статистика']",
+        "svg.vkuiIcon--poll_outline_20",
+        "svg[class*='poll_outline']",
+        "svg[aria-label*='Статистика']",
+        "button:has(svg[class*='poll_outline'])",
+    ]
+    
+    def _find_stats_button(scope):
+        for sel in stats_selectors:
+            btn = scope.locator(sel).first
+            if btn.count() > 0:
+                logging.info(f"✅ Найдена кнопка статистики: {sel}")
+                return btn
+        return None
+    
+    btn = _find_stats_button(row) or _find_stats_button(page)
+    if not btn:
+        logging.error("❌ Кнопка статистики не найдена")
+        logging.info("🧹 Очищаем поиск для следующего запроса...")
+        _clear_search(page)
+        return False
+    
+    try:
+        btn.scroll_into_view_if_needed()
+        page.wait_for_timeout(500)
+        btn.click()
+        page.wait_for_timeout(3_000)
+        logging.info(f"✅ Статистика для '{found_text}' открыта")
+        return True
+    except Exception as e:
+        logging.error(f"❌ Ошибка при клике по кнопке статистики: {e}")
         return False
 
 

@@ -38,7 +38,7 @@ def main() -> None:
         "https://ads.vk.com/hq/dashboard/ad_groups"
         "?sudo=vkads_3012708486%40mailru"
         "&mode=ads&attribution=conversion"
-        "&date_from=01.08.2025&date_to=31.08.2025"
+        "&date_from=01.09.2025&date_to=30.09.2025"
         "&sort=-created"
     )
 
@@ -49,17 +49,23 @@ def main() -> None:
     posts = load_posts(posts_file)
     logger.info(f"✅ Найдено {len(posts)} строк / ссылок")
 
-    # Фильтруем строки - оставляем только с корректными названиями групп
+    # Фильтруем строки - оставляем только с корректными названиями групп и ID
     valid_posts = []
     skipped_count = 0
     
     for idx, post in enumerate(posts, 1):
         group_name = (post.get("Группа") or "").strip()
+        group_id = (post.get("ID_Группы") or "").strip()
         
-        # Проверяем, что название группы содержит "ЦР25"
+        # Проверяем, что название группы содержит "ЦР25" и есть ID группы
         if not group_name or "ЦР25" not in group_name.upper():
             skipped_count += 1
             logger.error(f"SKIPPED_NO_GROUP_NAME: [{idx}] Ссылка {post.get('Ссылка', 'N/A')} - название группы '{group_name}' не содержит ЦР25, пропускаю")
+            continue
+        
+        if not group_id:
+            skipped_count += 1
+            logger.error(f"SKIPPED_NO_GROUP_ID: [{idx}] Ссылка {post.get('Ссылка', 'N/A')} - отсутствует ID группы, пропускаю")
             continue
             
         valid_posts.append(post)
@@ -77,15 +83,22 @@ def main() -> None:
     batch_screenshots(valid_posts, output_dir)
     logger.info("✅ Скрины постов готовы")
 
-    # Собираем уникальные названия групп для оптимизированной обработки
+    # Собираем уникальные группы (ID + название) для оптимизированной обработки
     unique_groups = []
     seen_groups = set()
     
     for post in valid_posts:
+        group_id = post.get("ID_Группы", "").strip()
         group_name = post.get("Группа", "").upper()
-        if group_name not in seen_groups:
-            unique_groups.append(group_name)
-            seen_groups.add(group_name)
+        
+        # Используем ID как ключ уникальности, но передаем и ID и название
+        if group_id and group_id not in seen_groups:
+            unique_groups.append({
+                "id": group_id,
+                "name": group_name,
+                "display_name": post.get("Группа", "")
+            })
+            seen_groups.add(group_id)
 
     logger.info(f"📊 Обрабатываем {len(unique_groups)} уникальных групп в одном браузере...")
     
@@ -107,12 +120,18 @@ def main() -> None:
     skipped_campaigns = 0
     
     for post in valid_posts:
-        group_name = post.get("Группа", "").upper()
-        if group_name in successful_groups:
+        group_name = post.get("Группа", "")
+        # Проверяем, есть ли группа среди успешно обработанных (по display_name)
+        group_found = any(
+            group.get("display_name", "") == group_name 
+            for group in successful_groups
+        )
+        
+        if group_found:
             posts_for_report.append(post)
         else:
             skipped_campaigns += 1
-            logger.warning(f"🚫 Пропускаю кампанию '{post.get('Группа', 'N/A')}' из отчета - не удалось получить статистику")
+            logger.warning(f"🚫 Пропускаю кампанию '{group_name}' из отчета - не удалось получить статистику")
     
     if skipped_campaigns > 0:
         logger.warning(f"⚠️  Пропущено {skipped_campaigns} кампаний из отчета из-за ошибок статистики")
