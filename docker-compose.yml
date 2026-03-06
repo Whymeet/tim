@@ -8,7 +8,7 @@ services:
       - .:/app
     working_dir: /app
     environment:
-      - VNC_PASSWORD=${VNC_PASSWORD:-121212You@}
+      - VNC_PASSWORD=${VNC_PASSWORD:-1212You}
     stdin_open: true
     tty: true
 
@@ -21,4 +21,4 @@ services:
       - .:/app
     working_dir: /app
     environment:
-      - VNC_PASSWORD=${VNC_PASSWORD:-admin}
+      - VNC_PASSWORD=${VNC_PASSWORD:-1212You}
