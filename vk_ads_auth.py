@@ -17,8 +17,8 @@ def auth_vk_ads():
         input("Когда страница VK Ads полностью загрузится и ты авторизован, нажми Enter...")
         
         # Сохраняем сессию специально для VK Ads
-        context.storage_state(path="vk_ads_storage.json")
-        print("✅ Сессия VK Ads сохранена в vk_ads_storage.json")
+        context.storage_state(path="vk_storage.json")
+        print("✅ Сессия VK Ads сохранена в vk_storage.json")
         
         browser.close()
 

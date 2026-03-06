@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/matve/dev/tim/**)",
+      "Bash(python -c \":*)",
+      "Bash(ls c:/Users/matve/dev/tim/*.py)",
+      "Bash(ls c:/Users/matve/dev/tim/*.xlsx c:/Users/matve/dev/tim/*.json c:/Users/matve/dev/tim/*.png)"
+    ]
+  }
+}

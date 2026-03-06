@@ -36,10 +36,10 @@ def main() -> None:
     output_doc = "Отчет.docx"
     ads_url = (
         "https://ads.vk.com/hq/dashboard/ad_groups"
-        "?sudo=vkads_3012708486%40mailru"
+        "?sudo=vkads_3061384711%40mailru"
         "&mode=ads&attribution=conversion"
-        "&date_from=01.09.2025&date_to=30.09.2025"
-        "&sort=-created"
+        "&date_from=01.01.2026&date_to=28.02.2026"
+        "&sort=-stats.total.base.spent"
     )
 
     os.makedirs(output_dir, exist_ok=True)
@@ -57,10 +57,11 @@ def main() -> None:
         group_name = (post.get("Группа") or "").strip()
         group_id = (post.get("ID_Группы") or "").strip()
         
-        # Проверяем, что название группы содержит "ЦР25" и есть ID группы
-        if not group_name or "ЦР25" not in group_name.upper():
+        # Проверяем, что название группы содержит "ЦР26" или "ЦК26" и есть ID группы
+        upper_name = group_name.upper()
+        if not group_name or ("ЦР26" not in upper_name and "ЦК26" not in upper_name):
             skipped_count += 1
-            logger.error(f"SKIPPED_NO_GROUP_NAME: [{idx}] Ссылка {post.get('Ссылка', 'N/A')} - название группы '{group_name}' не содержит ЦР25, пропускаю")
+            logger.error(f"SKIPPED_NO_GROUP_NAME: [{idx}] Ссылка {post.get('Ссылка', 'N/A')} - название группы '{group_name}' не содержит ЦР26/ЦК26, пропускаю")
             continue
         
         if not group_id:
@@ -71,12 +72,12 @@ def main() -> None:
         valid_posts.append(post)
     
     if skipped_count > 0:
-        logger.warning(f"⚠️  Пропущено {skipped_count} строк без ЦР25 в названии. Ищите по 'SKIPPED_NO_GROUP_NAME' для просмотра")
-    
-    logger.info(f"✅ К обработке: {len(valid_posts)} строк с ЦР25 в названии групп")
+        logger.warning(f"⚠️  Пропущено {skipped_count} строк без ЦР26/ЦК26 в названии. Ищите по 'SKIPPED_NO_GROUP_NAME' для просмотра")
+
+    logger.info(f"✅ К обработке: {len(valid_posts)} строк с ЦР26/ЦК26 в названии групп")
 
     if not valid_posts:
-        logger.error("❌ Не найдено ни одной строки с ЦР25 в названии группы!")
+        logger.error("❌ Не найдено ни одной строки с ЦР26/ЦК26 в названии группы!")
         return
 
     logger.info("📸 Делаю скрины постов…")

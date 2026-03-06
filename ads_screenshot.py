@@ -384,9 +384,10 @@ def _shot_demography_section(page, path, demography_zoom=1.0):
             
             # Находим заголовок с названием кампании 
             title_selectors = [
-                "span[class*='TopLine'][class*='title']:has-text('ЦР25')",
-                "span.TopLine\\.module_title__XzA2Y:has-text('ЦР25')",
-                "span:has-text('ЦР25_')"
+                "span[class*='TopLine'][class*='title']:has-text('ЦР26')",
+                "span[class*='TopLine'][class*='title']:has-text('ЦК26')",
+                "span:has-text('ЦР26_')",
+                "span:has-text('ЦК26_')"
             ]
             
             title_element = None
@@ -710,6 +711,13 @@ def screenshot_group_stats(
         # Убеждаемся, что папка всё ещё существует
         _safe_mkdir(output_dir)
 
+        # Ждём появления вкладок статистики (до 10 сек)
+        try:
+            page.wait_for_selector("#tab_overview", timeout=10_000)
+            logging.info("✅ Вкладки статистики загружены")
+        except Exception:
+            logging.warning("⚠️  Вкладки статистики не появились за 10 сек, пробуем продолжить")
+
         # Iterate tabs --------------------------------------------------
         for tab in tabs or ("overview",):
             logging.info(f"📑 Обрабатываем вкладку: {tab}")
@@ -893,7 +901,7 @@ def screenshot_multiple_groups_stats(
     
     logging.info(f"🏁 Обработка завершена. Успешно: {len(successful_groups)}, Ошибки: {len(failed_groups)}")
     if failed_groups:
-        logging.warning(f"⚠️  Группы с ошибками: {', '.join(failed_groups)}")
+        logging.warning(f"⚠️  Группы с ошибками: {', '.join(g.get('name', str(g)) if isinstance(g, dict) else str(g) for g in failed_groups)}")
     
     return successful_groups, failed_groups
 
@@ -1139,10 +1147,17 @@ def _open_group_stats(page, group_name_upper: str) -> bool:
 def _create_screenshots_for_group(page, group_name_upper: str, output_dir: str, tabs, demography_zoom: float, geo_zoom: float):
     """Создает скриншоты для всех вкладок группы."""
     _safe_mkdir(output_dir)
-    
+
+    # Ждём появления вкладок статистики (до 10 сек)
+    try:
+        page.wait_for_selector("#tab_overview", timeout=10_000)
+        logging.info("✅ Вкладки статистики загружены")
+    except Exception:
+        logging.warning("⚠️  Вкладки статистики не появились за 10 сек, пробуем продолжить")
+
     for tab in tabs or ("overview",):
         logging.info(f"📑 Обрабатываем вкладку: {tab}")
-        
+
         tab_btn = page.locator(f"#tab_{tab}")
         if tab_btn.count():
             tab_btn.click()

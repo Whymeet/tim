@@ -34,7 +34,7 @@ def load_posts(file_path: str) -> list[dict]:
                     line = line.strip()
                     if "vk.com/wall" in line:
                         link = line
-                    elif line.startswith("ЦР25"):
+                    elif line.startswith("ЦР26") or line.startswith("ЦК26"):
                         group = line
                     elif line.isdigit():
                         group_id = line

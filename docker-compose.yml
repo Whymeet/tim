@@ -1,0 +1,24 @@
+services:
+  auth:
+    build: .
+    command: auth
+    ports:
+      - "6080:6080"
+    volumes:
+      - .:/app
+    working_dir: /app
+    environment:
+      - VNC_PASSWORD=${VNC_PASSWORD:-121212You@}
+    stdin_open: true
+    tty: true
+
+  main:
+    build: .
+    command: main
+    ports:
+      - "6080:6080"
+    volumes:
+      - .:/app
+    working_dir: /app
+    environment:
+      - VNC_PASSWORD=${VNC_PASSWORD:-admin}
